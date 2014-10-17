@@ -1,6 +1,6 @@
 module Analysis.Types.Effect where
 
 data Effect =
-  Var String
+  Var Int
   | App Effect Effect
   deriving Show
