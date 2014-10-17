@@ -302,7 +302,7 @@ normalize :: Annotation -> Annotation
 normalize ann =
   -- The second `renameByLambdas` is there only to ensure that all
   -- terms are equal to alpha renaming of the free variables
-  renameByLambdas $ unions $ reduce $ renameByLambdas ann
+  unions $ reduce $ renameByLambdas ann
   
 recombine (Var s) = D.singleton $ Var s
 -- recombine (App (Abs v ann) ann2) = cartesian App (recombine ann1) (recombine ann2)

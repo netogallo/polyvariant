@@ -13,18 +13,25 @@ import qualified Data.Set as D
 data Equiv = Equiv Annotation Annotation deriving Show
 
 instance Arbitrary Annotation where
-  arbitrary = do
-    s <- elements [1..7]
-    let var = elements $ [1..3]
-        lbl = elements $ map show [1..100]
-    case s of
-      1 -> Var <$> var
-      2 -> Union <$> arbitrary <*> arbitrary
-      3 -> (\v t -> App (Abs (S.Var v S.Ann) t)) <$> var <*> arbitrary <*> arbitrary
-      4 -> (\v -> Abs (S.Var v S.Ann)) <$> var <*> arbitrary
-      5 -> Label <$> lbl
-      6 -> (\v -> App (Var v)) <$> var <*> arbitrary
-      _ -> return Empty
+  arbitrary = mkBound <$> arbitrary'
+    where
+      arbitrary' = do
+        s <- elements [1..7]
+        let var = elements $ [1..3]
+            lbl = elements $ map show [1..100]
+        case s of
+          1 -> Var <$> var
+          2 -> Union <$> arbitrary' <*> arbitrary'
+          3 -> (\v t -> App (Abs (S.Var v S.Ann) t)) <$> var <*> arbitrary' <*> arbitrary'
+          4 -> (\v -> Abs (S.Var v S.Ann)) <$> var <*> arbitrary'
+          5 -> Label <$> lbl
+          6 -> (\v -> App (Var v)) <$> var <*> arbitrary'
+          _ -> return Empty
+      mkBound expr =
+        let
+          free = D.filter (not . bound) $ vars expr
+        in D.fold (\(v,_) s -> Abs (S.Var v S.Ann) s) expr free
+          
   shrink x =
     case x of
       Empty -> []
@@ -96,7 +103,7 @@ randomReplace v a = do
         Just _ -> yes
     maybeReplace elem = do
       let
-        canReplace = D.isSubsetOf D.empty $ D.filter (not . bound) $ vars elem
+        canReplace = D.isSubsetOf (D.filter (not . bound) $ vars elem) D.empty
       r <- lift arbitrary
       case r of
         True | canReplace -> do
