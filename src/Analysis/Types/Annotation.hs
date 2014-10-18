@@ -1,4 +1,4 @@
-{-# Language RecordWildCards, GADTs, TupleSections #-}
+{-# Language RecordWildCards, GADTs, TupleSections, MultiParamTypeClasses #-}
 module Analysis.Types.Annotation where
 import qualified Analysis.Types.Sorts as S
 import qualified Data.Set as D
@@ -9,7 +9,7 @@ import Control.Applicative
 import Control.Monad.Identity
 import Control.Monad (liftM)
 import Control.Monad.State
-import Analysis.Types.Common
+import qualified Analysis.Types.Common as C
 
 data Annotation =
   Var Int
@@ -19,7 +19,22 @@ data Annotation =
   | Label String
   | Empty
   | Set (D.Set Annotation)
-  deriving (Show)
+  deriving (Show,Read)
+
+instance C.LambdaCalculus Annotation Algebra where
+  lambdaDepths = depths
+  foldM = foldAnnM
+  byId = undefined
+
+data Algebra m a =
+  Algebra {
+    fvar :: Int -> Int -> m a,
+    fabs :: Int -> S.FlowVariable -> a -> m a,
+    flabel :: Int -> String -> m a,
+    funion :: Int -> a -> a -> m a,
+    fapp :: Int -> a -> a -> m a
+    }
+
 
 instance Eq Annotation where
   x == y = evalState (equiv x y) (ix + 1)
@@ -87,15 +102,6 @@ instance Ord Annotation where
           (Union _ _,_) -> return LT
           (_,Union _ _) -> return GT
 
-data Algebra m a =
-  Algebra {
-    fvar :: Int -> Int -> m a,
-    fabs :: Int -> S.FlowVariable -> a -> m a,
-    flabel :: Int -> String -> m a,
-    funion :: Int -> a -> a -> m a,
-    fapp :: Int -> a -> a -> m a
-   }
-
 maxIx ann = maximum $ D.toList $ D.map fst $ vars ann
 
 data ReduceContext = ReduceContext{
@@ -149,9 +155,9 @@ depths = runIdentity . (foldAnnM alg M.empty)
     sing i _ = return $ M.insert i 0 M.empty
     un i ma mb = return $ M.insert i 0 $ M.union ma mb
 
-bound (_,b) = b == Bound
+bound (_,b) = b == C.Bound
     
-vars = runIdentity . (foldAnnM alg (D.empty :: D.Set (Int,Boundness)))
+vars = runIdentity . (foldAnnM alg (D.empty :: D.Set (Int,C.Boundness)))
   where
     alg = Algebra {
       fvar = const fvar,
@@ -161,53 +167,31 @@ vars = runIdentity . (foldAnnM alg (D.empty :: D.Set (Int,Boundness)))
       fapp = const funion
       }
     funion a b = return $ D.union a b
-    fvar v = return $ D.singleton (v,Free)
+    fvar v = return $ D.singleton (v,C.Free)
     fabs v s =
       let
         bounder (v',boundness)
-          | S.name v == v' = (v',Bound)
+          | S.name v == v' = (v',C.Bound)
           | otherwise = (v',boundness)
-      in return $ D.insert (S.name v, Bound) $ D.map bounder s
+      in return $ D.insert (S.name v, C.Bound) $ D.map bounder s
 
-renameByLambdas obj = runIdentity $ calcReplacements  >>= mkReplacements
+renameByLambdasOffset base offset obj = lift calcReplacements  >>= mkReplacements
   where
     calcReplacements = foldAnnM repAlg M.empty obj
-    sing i _ = return $ M.insert i M.empty M.empty
-    un i sa sb = return $ M.insert i M.empty $ M.union sa sb
-    fabs i v s =
-      let
-        d = fromJust $ M.lookup i $ depths obj
-        -- If a replacement is already defined for the variable, leave it that way
-        -- since this variable must habe been bound earlier
-      in return $ M.map (M.insertWith (\_ d' -> d') (S.name v) d) $ M.insert i M.empty s
     repAlg = Algebra{
-      fvar = sing,
-      flabel = sing,
-      funion = un,
-      fapp = un,
-      fabs = fabs
+      fvar = C.discard $ C.rename base,
+      flabel = C.discard $ C.rename base,
+      funion = C.rename2 base,
+      fapp = C.rename2 base,
+      fabs = C.renameAbs base offset obj
       }
-    subVar rep i v = do
-      let rep' = fromJust $ M.lookup i rep
-      (n,freeVars) <- get
-      case (M.lookup v rep', M.lookup v freeVars) of
-        -- Free variables, replace them with a
-        -- fresh name
-        (Nothing,Nothing) -> do
-          put (n-1, M.insert v n freeVars)
-          return $ Var n
-        (Nothing,Just n') -> return $ Var n'
-        (Just n',_) -> return $ Var (n' + 1)
-
-    subAbs rep i v e =
-      let rep' = fromJust $ M.lookup i rep
-      in return $ Abs v{S.name=1 + (fromJust $ M.lookup (S.name v) rep')} e
-                       
     subAlg rep = algebra{
-      fvar = subVar rep,
-      fabs = subAbs rep
+      fvar = C.subVar Var rep,
+      fabs = C.subAbs Abs rep
       }
-    mkReplacements rep = evalStateT (foldAnnM (subAlg rep) Empty obj) (-1 :: Int,M.empty)
+    mkReplacements rep = foldAnnM (subAlg rep) Empty obj
+
+renameByLambdas obj = runIdentity $ evalStateT (renameByLambdasOffset M.empty 0 obj) (-1 :: Int,M.empty)
 
 rename ren = runIdentity . (foldAnnM alg Empty)
   where
