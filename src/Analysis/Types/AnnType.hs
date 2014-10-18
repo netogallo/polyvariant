@@ -7,6 +7,7 @@ import Control.Monad.State
 import Control.Monad.Identity
 import qualified Data.Map as M
 import qualified Analysis.Types.Common as C
+import Data.Maybe
 
 data Type =
   TBool
@@ -26,6 +27,13 @@ data Algebra m a =
     fann :: Int -> a -> A.Annotation -> m a,
     fforall :: Int -> S.FlowVariable -> a -> m a
     }
+
+algebra :: Monad m => Algebra m Type
+algebra = Algebra{
+  farr = \_ a1 eff a2 -> return $ Arr a1 eff a2,
+  fann = \_ a1 ann -> return $ Ann a1 ann,
+  fforall = \_ v a1 -> return $ Forall v a1
+  }
 
 foldTypeM :: Monad m => Algebra m a -> a -> Type -> m a
 foldTypeM f@Algebra{..} s0 a0 = evalStateT (foldTypeM' s0 a0) 0
@@ -61,4 +69,15 @@ renameByLambdasOffset base offset obj = lift calcReplacements >>= mkReplacements
       fforall = C.renameAbs base offset obj
       }
     calcReplacements = C.foldM repAlg M.empty obj
-    mkReplacements = undefined
+    arr rep i t1 eff t2 = do
+      let offset' = fromJust $ M.lookup i $ C.lambdaDepths (obj :: Type)
+          base' = fromJust $ M.lookup i rep
+      eff' <- E.renameByLambdasOffset base' offset' eff
+      return $ Arr t1 eff' t2
+    subAlg rep = algebra{
+      farr = arr rep,
+      fann = A.subAppAnn Ann obj rep
+      }
+    mkReplacements rep = C.foldM (subAlg rep) TBool obj
+
+renameByLambdas obj = runIdentity $ evalStateT (renameByLambdasOffset M.empty 0 obj) (-1 :: Int,M.empty)

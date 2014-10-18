@@ -193,6 +193,12 @@ renameByLambdasOffset base offset obj = lift calcReplacements  >>= mkReplacement
 
 renameByLambdas obj = runIdentity $ evalStateT (renameByLambdasOffset M.empty 0 obj) (-1 :: Int,M.empty)
 
+subAppAnn cons obj rep i s ann = do
+  let offset' = fromJust $ M.lookup i $ C.lambdaDepths obj
+  ann' <- renameByLambdasOffset (fromJust $ M.lookup i rep) offset' ann
+  return $ cons s ann'
+
+
 rename ren = runIdentity . (foldAnnM alg Empty)
   where
     alg = algebra{

@@ -92,14 +92,10 @@ renameByLambdasOffset base offset obj = lift calcReplacements >>= mkReplacements
       funion = C.rename2 base,
       fflow = C.discard $ C.discard $ C.rename base
       }
-    subAppAnn rep i s ann = do
-      let offset' = fromJust $ M.lookup i $ depths obj
-      ann' <- A.renameByLambdasOffset (fromJust $ M.lookup i rep) offset' ann
-      return $ AppAnn s ann'
     subAlg rep =  algebra{
       fvar = C.subVar Var rep,
       fabs = C.subAbs Abs rep,
-      fappAnn = subAppAnn rep
+      fappAnn = A.subAppAnn AppAnn obj rep
       }
     mkReplacements rep = foldEffectM (subAlg rep) Empty obj
 
