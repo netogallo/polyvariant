@@ -53,6 +53,12 @@ depths = runIdentity . (C.foldM alg M.empty)
       fforall = \i _ d1 -> return $ M.insert i 0 $ M.map (+(1 :: Int)) d1
       }
 
--- renameByLambdasOffset base offset obj = lift calcReplacements >>= mkReplacements
---  where
---    forall i v s = undefined
+renameByLambdasOffset base offset obj = lift calcReplacements >>= mkReplacements
+  where
+    repAlg = Algebra{
+      farr = \i a1 _ a2 -> C.rename2 base i a1 a2,
+      fann = \i a1 _ -> C.rename1 base i a1,
+      fforall = C.renameAbs base offset obj
+      }
+    calcReplacements = C.foldM repAlg M.empty obj
+    mkReplacements = undefined
