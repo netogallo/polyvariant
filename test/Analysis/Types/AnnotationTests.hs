@@ -135,19 +135,23 @@ betaEq a = do
     var = 1 + (maximum $ D.toList $ D.map fst $ vars a)
     
 
-unionEq = maybeRule asocEq >=> maybeRule identEq >=> maybeRuleProb (1,8) emptyEq
+unionEq p = maybeRuleProb (1,p) asocEq >=> maybeRuleProb (1,p) identEq >=> maybeRuleProb (1,p) emptyEq
 
-randomRewrite e =
-  case e of
-    e'@(Union _ _) -> do
-      Union a b <- unionEq e'
-      Union <$> randomRewrite a <*> randomRewrite b
-    (App (Abs v e1) e2) -> do
-      e' <- (\x -> App (Abs v x)) <$> randomRewrite e1 <*> randomRewrite e2
-      maybeRule betaEq e'
-    Abs v e1 -> Abs v <$> randomRewrite e1
-    App a b -> App <$> randomRewrite a <*> randomRewrite b
-    Empty -> maybeRule identEq Empty
-    a -> return a
+randomRewrite ann = evalStateT (randomRewrite' ann) 1
+  where
+    randomRewrite' e'' = do
+      p <- get
+      put (p + 1)
+      e <- lift $ maybeRuleProb (1,p) betaEq e''
+      case e of
+        e'@(Union _ _) -> do
+          Union a b <- lift $ unionEq p e'
+          Union <$> randomRewrite' a <*> randomRewrite' b
+        (App (Abs v e1) e2) -> do
+          (\x -> App (Abs v x)) <$> randomRewrite' e1 <*> randomRewrite' e2
+        Abs v e1 -> Abs v <$> randomRewrite' e1
+        App a b -> App <$> randomRewrite' a <*> randomRewrite' b
+        Empty -> lift $ maybeRuleProb (1,p) identEq Empty
+        a -> return a
     
 normalizeEquivalent (Equiv a b) = normalize a == normalize b
