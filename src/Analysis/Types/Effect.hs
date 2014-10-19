@@ -33,7 +33,8 @@ data Algebra m a =
     fappAnn :: Int -> a -> A.Annotation -> m a,
     fabs :: Int -> S.FlowVariable -> a -> m a,
     funion :: Int -> a -> a -> m a,
-    fflow :: Int -> String -> A.Annotation -> m a
+    fflow :: Int -> String -> A.Annotation -> m a,
+    fempty :: Int -> m a
     }
 
 algebra :: Monad m => Algebra m Effect
@@ -43,12 +44,13 @@ algebra = Algebra{
   funion = un Union,
   fabs = \_ v s -> return $ Abs v s,
   fflow = \_ lbl ann -> return $ Flow lbl ann,
-  fappAnn = \_ s ann -> return $ AppAnn s ann
+  fappAnn = \_ s ann -> return $ AppAnn s ann,
+  fempty = \_ -> return Empty
   }
   where
     un c _ a1 a2 = return $ c a1 a2
 
-foldEffectM f@Algebra{..} s0 a0 = evalStateT (foldEffectM' s0 a0) 0
+foldEffectM f@Algebra{..} a0 = evalStateT (foldEffectM' undefined a0) 0
   where
     foldEffectM' s a = do
       i <- get
@@ -66,9 +68,9 @@ foldEffectM f@Algebra{..} s0 a0 = evalStateT (foldEffectM' s0 a0) 0
         Abs v a1 -> (foldEffectM' s a1) >>= (lift . (fabs i v))
         AppAnn a1 a2 -> (foldEffectM' s a1) >>= \s' -> lift $ fappAnn i s' a2
         Flow l a1 -> lift $ fflow i l a1
-        Empty -> return s
+        Empty -> lift $ fempty i
 
-depths = runIdentity . (foldEffectM alg M.empty) 
+depths = runIdentity . (foldEffectM alg) 
   where
     alg = Algebra {
       fapp = un,
@@ -76,27 +78,29 @@ depths = runIdentity . (foldEffectM alg M.empty)
       fabs = \i _ s -> return $ M.insert i 0 $ M.map (+1) s,
       fvar = sing,
       fappAnn = \i s _ -> return $ M.insert i 0 $ M.map (+1) s,
-      fflow = \i _ _ -> return $ M.insert i 0 M.empty
+      fflow = \i _ _ -> return $ M.insert i 0 M.empty,
+      fempty = const (return M.empty)
       }
     sing i _ = return $ M.insert i 0 M.empty
     un i ma mb = return $ M.insert i 0 $ M.union ma mb
     
 renameByLambdasOffset base offset obj = lift calcReplacements >>= mkReplacements
   where
-    calcReplacements = foldEffectM repAlg M.empty obj
+    calcReplacements = foldEffectM repAlg obj
     repAlg = Algebra{
       fvar = C.discard $ C.rename base,
       fapp = C.rename2 base,
       fappAnn = \i s _ -> C.rename1 base i s,
       fabs = C.renameAbs base offset obj,
       funion = C.rename2 base,
-      fflow = C.discard $ C.discard $ C.rename base
+      fflow = C.discard $ C.discard $ C.rename base,
+      fempty = const (return M.empty)
       }
     subAlg rep =  algebra{
       fvar = C.subVar Var rep,
       fabs = C.subAbs Abs rep,
       fappAnn = A.subAppAnn AppAnn obj rep
       }
-    mkReplacements rep = foldEffectM (subAlg rep) Empty obj
+    mkReplacements rep = foldEffectM (subAlg rep) obj
 
 renameByLambdas obj = runIdentity $ evalStateT (renameByLambdasOffset M.empty 0 obj) (-1 :: Int, M.empty)

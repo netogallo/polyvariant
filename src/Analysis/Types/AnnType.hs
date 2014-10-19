@@ -19,30 +19,40 @@ data Type =
 instance C.LambdaCalculus Type Algebra where
   lambdaDepths = depths
   foldM = foldTypeM
-  byId = undefined
+  byId i e = undefined
+-- runIdentity $ evalStateT (C.foldM alg TBool e) Nothing
+--     where
+--       putElem e = do
+--         put (Just e)
+--         return e
+--       alg = Algebra{
+--         farr = \i' t1 eff t2 -> let t = Arr t1 eff t2 in if i == i' then putElem t else return t
+--         }
 
 data Algebra m a =
   Algebra{
     farr :: Int -> a -> E.Effect -> a -> m a,
     fann :: Int -> a -> A.Annotation -> m a,
-    fforall :: Int -> S.FlowVariable -> a -> m a
+    fforall :: Int -> S.FlowVariable -> a -> m a,
+    ftbool :: Int -> m a
     }
 
 algebra :: Monad m => Algebra m Type
 algebra = Algebra{
   farr = \_ a1 eff a2 -> return $ Arr a1 eff a2,
   fann = \_ a1 ann -> return $ Ann a1 ann,
-  fforall = \_ v a1 -> return $ Forall v a1
+  fforall = \_ v a1 -> return $ Forall v a1,
+  ftbool = \_ -> return TBool
   }
 
-foldTypeM :: Monad m => Algebra m a -> a -> Type -> m a
-foldTypeM f@Algebra{..} s0 a0 = evalStateT (foldTypeM' s0 a0) 0
+foldTypeM :: Monad m => Algebra m a -> Type -> m a
+foldTypeM f@Algebra{..} a0 = evalStateT (foldTypeM' undefined a0) 0
   where
     foldTypeM' s a = do
       i <- get
       put (i+1)
       case a of
-        TBool -> return s
+        TBool -> lift $ ftbool i
         Ann t1 ann -> do
           t1' <- foldTypeM' s t1
           lift $ fann i t1' ann
@@ -53,12 +63,13 @@ foldTypeM f@Algebra{..} s0 a0 = evalStateT (foldTypeM' s0 a0) 0
         Forall v t1 ->
           foldTypeM' s t1 >>= lift . (fforall i v)
 
-depths = runIdentity . (C.foldM alg M.empty)
+depths = runIdentity . (C.foldM alg)
   where
     alg = Algebra{
       farr = \i d1 _ d2 -> return $ M.insert i 0 $ M.union d1 d2,
       fann = \i d _ -> return $ M.insert i 0 d,
-      fforall = \i _ d1 -> return $ M.insert i 0 $ M.map (+(1 :: Int)) d1
+      fforall = \i _ d1 -> return $ M.insert i 0 $ M.map (+(1 :: Int)) d1,
+      ftbool = \_ -> return M.empty
       }
 
 renameByLambdasOffset base offset obj = lift calcReplacements >>= mkReplacements
@@ -66,9 +77,10 @@ renameByLambdasOffset base offset obj = lift calcReplacements >>= mkReplacements
     repAlg = Algebra{
       farr = \i a1 _ a2 -> C.rename2 base i a1 a2,
       fann = \i a1 _ -> C.rename1 base i a1,
-      fforall = C.renameAbs base offset obj
+      fforall = C.renameAbs base offset obj,
+      ftbool = const (return M.empty)
       }
-    calcReplacements = C.foldM repAlg M.empty obj
+    calcReplacements = C.foldM repAlg obj
     arr rep i t1 eff t2 = do
       let offset' = fromJust $ M.lookup i $ C.lambdaDepths (obj :: Type)
           base' = fromJust $ M.lookup i rep
@@ -78,6 +90,6 @@ renameByLambdasOffset base offset obj = lift calcReplacements >>= mkReplacements
       farr = arr rep,
       fann = A.subAppAnn Ann obj rep
       }
-    mkReplacements rep = C.foldM (subAlg rep) TBool obj
+    mkReplacements rep = C.foldM (subAlg rep) obj
 
 renameByLambdas obj = runIdentity $ evalStateT (renameByLambdasOffset M.empty 0 obj) (-1 :: Int,M.empty)

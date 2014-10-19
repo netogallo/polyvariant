@@ -84,14 +84,14 @@ identEq a = return a
 
 maybeRuleProb p r s = do
   apply <- choose p
-  if apply == (0 :: Int)
+  if apply <= (1 :: Int)
     then r s
     else return s
 
 maybeRule = maybeRuleProb (0,1)
 
 randomReplace v a = do
-  (ann, s) <- runStateT (foldAnnM alg Empty a) Nothing
+  (ann, s) <- runStateT (foldAnnM alg a) Nothing
   case s of
     Nothing -> return Nothing
     Just s' -> return $ Just (ann, s')
@@ -122,7 +122,8 @@ randomReplace v a = do
       flabel = single Label,
       fapp = fun App,
       funion = fun Union,
-      fabs = fabs
+      fabs = fabs,
+      fempty = const (return Empty)
       }
       
 
@@ -132,7 +133,7 @@ betaEq a = do
     Just (a', exp) -> return $ App (Abs (S.Var var S.Ann) a') exp
     Nothing -> return a
   where
-    var = 1 + (maximum $ D.toList $ D.map fst $ vars a)
+    var = 1 + (maximum $ 0 : (D.toList $ D.map fst $ vars a))
     
 
 unionEq p = maybeRuleProb (1,p) asocEq >=> maybeRuleProb (1,p) identEq >=> maybeRuleProb (1,p) emptyEq

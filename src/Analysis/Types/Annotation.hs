@@ -19,7 +19,15 @@ data Annotation =
   | Label String
   | Empty
   | Set (D.Set Annotation)
-  deriving (Show,Read)
+    -- Apparently the GHC derived Eq and Ord work well enough
+    -- such that normalizing equivalent terms will reduce
+    -- in equal terms
+    -- For that property to hold, elements that have equal
+    -- structure up to alpha renameing should be considered
+    -- adjecent to the other acording to the Ord instance
+  deriving (Show,Read,Eq,Ord)
+           
+
 
 instance C.LambdaCalculus Annotation Algebra where
   lambdaDepths = depths
@@ -32,75 +40,9 @@ data Algebra m a =
     fabs :: Int -> S.FlowVariable -> a -> m a,
     flabel :: Int -> String -> m a,
     funion :: Int -> a -> a -> m a,
-    fapp :: Int -> a -> a -> m a
+    fapp :: Int -> a -> a -> m a,
+    fempty :: Int -> m a
     }
-
-
-instance Eq Annotation where
-  x == y = evalState (equiv x y) (ix + 1)
-    where
-      equiv x' y' =
-        case (x',y') of
-          (Var i,Var j) -> return (i == j)
-          ((Union a b), Union a' b') -> (&&) <$> equiv a a' <*> equiv b b'
-          (App a b, App a' b') -> (&&) <$> equiv a a' <*> equiv b b'
-          (Empty, Empty) -> return True
-          (Label i, Label j) -> return (i == j)
-          (Abs v1 e,Abs v2 e') | v1 == v2 -> equiv e e'
-          (Abs v1 e,Abs v2 e') | S.sort v1 == S.sort v2 -> do
-            i <- get
-            put (i + 1)
-            equiv (rename (M.fromList [(S.name v1,i)]) e) (rename (M.fromList [(S.name v2,i)]) e')
-          (Set exps, Set exps') | D.size exps == D.size exps' ->
-            foldM (\s (e,e') -> (&& s) <$> equiv e e') True $ zip (D.toAscList exps) (D.toAscList exps')
-          _ -> return False
-          
-      ix = max (maxIx x) (maxIx y)
-
-instance Ord Annotation where
-
-  compare x' y' = evalState (compare' x' y') (ix + 1)
-    where
-      ix = max (maxIx x') (maxIx y')
-      compare'' EQ b = b
-      compare'' a _ = a
-      compare' x y =
-        case (x,y) of
-          (Var i,Var j) -> return $ compare i j
-          (Union a b,Union a' b') -> compare'' <$> compare' a a' <*> compare' b b'
-          (App a b,App a' b') -> compare'' <$> compare' a a' <*> compare' b b'
-          (Label i,Label j) -> return $ compare i j
-          (Empty, Empty) -> return EQ
-          (Abs v1 e, Abs v2 e') | v1 == v2 -> compare' e e'
-          (Abs v1 e, Abs v2 e') | S.sort v1 == S.sort v2 -> do
-            i <- get
-            put (i+1)
-            compare' (rename (M.fromList [(S.name v1,i)]) e) (rename (M.fromList [(S.name v2,i)]) e')
-          (Set es, Set es') -> do
-            let
-              la = D.toAscList es
-              lb = D.toAscList es'
-              cata EQ (e,e') = compare' e e'
-              cata r _ = return r
-            r1 <- foldM cata EQ $ zip la lb
-            case r1 of
-              EQ | D.size es > D.size es' -> return GT
-              EQ | D.size es < D.size es' -> return LT
-              r -> return r
-            
-          (Abs v1 _, Abs v2 _) -> return $ compare v1 v2
-          (Empty,_) -> return LT
-          (_,Empty) -> return GT
-          (Var _,_) -> return LT
-          (_,Var _) -> return GT
-          (Label _,_) -> return LT
-          (_,Label _) -> return GT
-          (Abs _ _,_) -> return LT
-          (_,Abs _ _) -> return GT
-          (App _ _,_) -> return LT
-          (_,App _ _) -> return GT
-          (Union _ _,_) -> return LT
-          (_,Union _ _) -> return GT
 
 maxIx ann = maximum $ D.toList $ D.map fst $ vars ann
 
@@ -114,7 +56,8 @@ algebra = Algebra{
   fabs = \_ v s -> return $ Abs v s,
   flabel = \_ l -> return $ Label l,
   funion = \_ a b -> return $ Union a b,
-  fapp = \_ a b -> return $ App a b
+  fapp = \_ a b -> return $ App a b,
+  fempty = const (return Empty)
   }
 
 fresh :: Monad m => StateT ReduceContext m Int
@@ -123,7 +66,7 @@ fresh = do
   put $ ctx{freshIx = freshIx ctx + 1}
   return $ freshIx ctx
 
-foldAnnM f@Algebra{..} s0 a0 = evalStateT (foldAnnM' s0 a0) 0
+foldAnnM f@Algebra{..} a0 = evalStateT (foldAnnM' undefined a0) 0
   where
     foldAnnM' s a = do
       i <- get
@@ -141,30 +84,32 @@ foldAnnM f@Algebra{..} s0 a0 = evalStateT (foldAnnM' s0 a0) 0
         Var v -> lift $ fvar i v
         Abs v a1 -> (foldAnnM' s a1) >>= (lift . (fabs i v))
         Label l -> lift $ flabel i l
-        Empty -> return s
+        Empty -> lift $ fempty i
 
-depths = runIdentity . (foldAnnM alg M.empty) 
+depths = runIdentity . (foldAnnM alg) 
   where
     alg = Algebra {
       fapp = un,
       funion = un,
       fabs = \i _ m -> return $ M.insert i 0 $ M.map (+1) m,
       flabel = sing,
-      fvar = sing
+      fvar = sing,
+      fempty = const (return M.empty)
       }
     sing i _ = return $ M.insert i 0 M.empty
     un i ma mb = return $ M.insert i 0 $ M.union ma mb
 
 bound (_,b) = b == C.Bound
     
-vars = runIdentity . (foldAnnM alg (D.empty :: D.Set (Int,C.Boundness)))
+vars = runIdentity . (foldAnnM alg)
   where
     alg = Algebra {
       fvar = const fvar,
       fabs = const fabs,
       flabel = const $ const $ return D.empty,
       funion = const funion,
-      fapp = const funion
+      fapp = const funion,
+      fempty = const $ return (D.empty :: D.Set (Int,C.Boundness))
       }
     funion a b = return $ D.union a b
     fvar v = return $ D.singleton (v,C.Free)
@@ -177,19 +122,20 @@ vars = runIdentity . (foldAnnM alg (D.empty :: D.Set (Int,C.Boundness)))
 
 renameByLambdasOffset base offset obj = lift calcReplacements  >>= mkReplacements
   where
-    calcReplacements = foldAnnM repAlg M.empty obj
+    calcReplacements = foldAnnM repAlg obj
     repAlg = Algebra{
       fvar = C.discard $ C.rename base,
       flabel = C.discard $ C.rename base,
       funion = C.rename2 base,
       fapp = C.rename2 base,
-      fabs = C.renameAbs base offset obj
+      fabs = C.renameAbs base offset obj,
+      fempty = const $ return M.empty
       }
     subAlg rep = algebra{
       fvar = C.subVar Var rep,
       fabs = C.subAbs Abs rep
       }
-    mkReplacements rep = foldAnnM (subAlg rep) Empty obj
+    mkReplacements rep = foldAnnM (subAlg rep) obj
 
 renameByLambdas obj = runIdentity $ evalStateT (renameByLambdasOffset M.empty 0 obj) (-1 :: Int,M.empty)
 
@@ -199,7 +145,7 @@ subAppAnn cons obj rep i s ann = do
   return $ cons s ann'
 
 
-rename ren = runIdentity . (foldAnnM alg Empty)
+rename ren = runIdentity . (foldAnnM alg)
   where
     alg = algebra{
       fvar = const fvar,
@@ -208,14 +154,14 @@ rename ren = runIdentity . (foldAnnM alg Empty)
     fvar v = return $ Var $ M.findWithDefault v v ren
     fabs v s = return $ Abs v{S.name=M.findWithDefault (S.name v) (S.name v) ren} s
 
-replace rep = runIdentity . (foldAnnM alg Empty)
+replace rep = runIdentity . (foldAnnM alg)
   where
     alg = algebra{
       fvar = const $ \v -> return $ M.findWithDefault (Var v) v rep
       }
 
 -- Increase or decrease the `depth` of all bound variables in the expression
-increment i ann = runIdentity $ foldAnnM (alg $ D.map fst $ D.filter bound $ vars ann) Empty ann
+increment i ann = runIdentity $ foldAnnM (alg $ D.map fst $ D.filter bound $ vars ann) ann
   where
     fvar vars _ v
       | D.member v vars = return $ Var $ v + i
@@ -229,7 +175,7 @@ increment i ann = runIdentity $ foldAnnM (alg $ D.map fst $ D.filter bound $ var
       }
 
 application fun@(Abs var a1) a2 =
-  increment (-1) $ runIdentity $ foldAnnM (alg $ depths a1) Empty a1
+  increment (-1) $ runIdentity $ foldAnnM (alg $ depths a1) a1
   where
     a2' = increment 1 a2
     fvar depths i v
@@ -256,7 +202,7 @@ application a1 a2 = App a1 a2
 --     newVars = D.toList $ D.intersection varsA1 freeA2
 -- application a1 a2 = return $ App a1 a2
 
-reduce' = runIdentity . (foldAnnM alg Empty)
+reduce' = runIdentity . (foldAnnM alg)
   where
     alg = algebra{
       fapp = \i a1 a2 -> return $ application a1 a2

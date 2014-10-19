@@ -9,8 +9,8 @@ data Boundness = Bound | Free deriving (Show,Eq,Enum,Ord)
 
 class LambdaCalculus a alg | a -> alg where
   lambdaDepths :: a -> M.Map Int Int
-  byId :: Int -> a -> a
-  foldM :: Monad m => alg m x -> x -> a -> m x
+  byId :: Int -> a -> Maybe a
+  foldM :: Monad m => alg m x -> a -> m x
 
 discard f = \x -> \_ -> f x
 
