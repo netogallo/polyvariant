@@ -14,20 +14,23 @@ data Type =
   | Arr Type E.Effect Type
   | Ann Type A.Annotation
   | Forall S.FlowVariable Type
-  deriving (Show,Read)
+  deriving (Show,Read,Eq,Ord)
 
 instance C.LambdaCalculus Type Algebra where
   lambdaDepths = depths
   foldM = foldTypeM
-  byId i e = undefined
--- runIdentity $ evalStateT (C.foldM alg TBool e) Nothing
---     where
---       putElem e = do
---         put (Just e)
---         return e
---       alg = Algebra{
---         farr = \i' t1 eff t2 -> let t = Arr t1 eff t2 in if i == i' then putElem t else return t
---         }
+  byId i e = runIdentity $ execStateT (C.foldM alg e) Nothing
+    where
+      putElem i' e' = do
+        unless (i /= i') $ put (Just e')
+        return e'
+          
+      alg = Algebra{
+        farr = \i' t1 eff t2 -> putElem i' $ Arr t1 eff t2,
+        fann = \i' t1 ann -> putElem i' $ Ann t1 ann,
+        fforall = \i' v t -> putElem i' $ Forall v t,
+        ftbool = \i' -> putElem i' TBool
+        }
 
 data Algebra m a =
   Algebra{

@@ -7,6 +7,10 @@ import Control.Monad.State
 
 data Boundness = Bound | Free deriving (Show,Eq,Enum,Ord)
 
+data Variable t =
+  Var {name :: String, set :: t}
+  deriving (Eq, Read, Show, Ord)
+
 class LambdaCalculus a alg | a -> alg where
   lambdaDepths :: a -> M.Map Int Int
   byId :: Int -> a -> Maybe a

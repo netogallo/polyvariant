@@ -4,26 +4,16 @@ import qualified Analysis.Types.Type as T
 import qualified Analysis.Types.Sorts as S
 import qualified Analysis.Types.Effect as E
 import qualified Analysis.Types.Annotation as An
+import Analysis.Algorithms.Common
 import Control.Monad.State
 import Control.Applicative
 
-fresh :: Monad m => StateT Int m (S.Sort -> S.FlowVariable)
-fresh = do
-  v <- get
-  put (v + 1)
-  return $ S.Var v
-
-freshAnn :: (Monad m, Functor m) => StateT Int m S.FlowVariable
-freshAnn = (\f -> f S.Ann) <$> fresh
-
-freshEff :: (Monad m, Functor m) => StateT Int m S.FlowVariable
-freshEff = (\f -> f S.Eff) <$> fresh
 
 completion' :: (Monad m, Functor m) =>
-               ((A.Type, [S.FlowVariable]) -> StateT Int m (A.Type, [S.FlowVariable]))
+               ((A.Type, [S.FlowVariable]) -> StateT RContext m (A.Type, [S.FlowVariable]))
                -> T.Type
                -> [S.FlowVariable]
-               -> StateT Int m (A.Type, [S.FlowVariable])
+               -> StateT RContext m (A.Type, [S.FlowVariable])
 completion' cont T.TBool _ = cont (A.TBool, [])
 completion' cont (T.Arr t1 t2) c0 = completion' cont' t1 [] >>= cont
   where
@@ -56,5 +46,5 @@ completion' cont (T.Arr t1 t2) c0 = completion' cont' t1 [] >>= cont
 completion :: (Monad m, Functor m) =>
               T.Type
               -> [S.FlowVariable]
-              -> StateT Int m (A.Type, [S.FlowVariable])
+              -> StateT RContext m (A.Type, [S.FlowVariable])
 completion = completion' return

@@ -1,4 +1,5 @@
 module Analysis.Types.Sorts where
+import Control.Lens
 
 data Sort =
   Ann

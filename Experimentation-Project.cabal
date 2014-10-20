@@ -30,6 +30,7 @@ executable Experimentation-Project
                        ,mtl >= 2.2.1
                        ,containers >= 0.5
                        ,QuickCheck >= 2.7
+                       ,lens >= 4.3
   hs-source-dirs:      src
                        ,test
   default-language:    Haskell2010
