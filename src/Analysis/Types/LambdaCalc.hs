@@ -38,6 +38,17 @@ instance C.LambdaCalculus (LambdaCalc t) (Algebra t) where
   lambdaDepths = depths
   byId = undefined
   foldM = foldLambdaCalcM
+  app (App _ a1 a2) = Just (a1,a2)
+  app _ = Nothing
+  appC = undefined
+  var (Var i) = Just i
+  var _ = Nothing
+  varC = Var
+  abst (Abs _ v e) = undefined -- Just (v,e)
+  abstC = undefined
+  increment = undefined
+  baseAlgebra = undefined
+
 
 foldLambdaCalcM Algebra{..} expr = evalStateT (foldLambdaCalcM' undefined expr) 0
   where

@@ -5,7 +5,6 @@ import qualified Analysis.Types.Sorts as S
 import qualified Data.Set as D
 import Control.Monad.State
 import qualified Data.Map as M
-import Data.Maybe
 import Control.Monad.Identity
 import qualified Analysis.Types.Common as C
 
@@ -20,13 +19,39 @@ data Effect =
   | Set (D.Set Effect)
   deriving (Show,Read,Ord,Eq)
 
-instance C.LambdaCalculus Effect Algebra where
-  lambdaDepths = depths
+instance C.Fold Effect Algebra where
   foldM = foldEffectM
   byId = undefined
 
+instance C.LambdaCalculus Effect Algebra where
+  lambdaDepths = depths
+  app (App a1 a2) = Just (a1,a2)
+  app _ = Nothing
+  appC = App
+  var (Var i) = Just i
+  var _ = Nothing
+  varC = Var
+  abst (Abs v e) = Just (v,e)
+  abst _ = Nothing
+  abstC = Abs
+  increment = increment
+  baseAlgebra var abst app = algebra{
+    fvar = var,
+    fabs = abst,
+    fapp = app
+    }
+  groupAlgebra var abst app =
+    Algebra {
+      fvar = var,
+      fapp = app,
+      fappAnn = \_ a _ -> return a,
+      fabs = abst,
+      funion = \_ a b -> return $ a C.<+> b,
+      fflow = \_ _ _ -> return C.void,
+      fempty = \_ -> return C.void
+      }
 
-data Algebra m a =
+data Algebra m t a =
   Algebra {
     fvar :: Int -> Int -> m a,
     fapp :: Int -> a -> a -> m a,
@@ -37,7 +62,7 @@ data Algebra m a =
     fempty :: Int -> m a
     }
 
-algebra :: Monad m => Algebra m Effect
+algebra :: Monad m => Algebra m Effect Effect
 algebra = Algebra{
   fvar = \_ v -> return $ Var v,
   fapp = un App,
@@ -104,3 +129,60 @@ renameByLambdasOffset base offset obj = lift calcReplacements >>= mkReplacements
     mkReplacements rep = foldEffectM (subAlg rep) obj
 
 renameByLambdas obj = runIdentity $ evalStateT (renameByLambdasOffset M.empty 0 obj) (-1 :: Int, M.empty)
+
+vars :: Effect -> D.Set (Int,C.Boundness)
+vars = runIdentity . C.foldM alg
+  where
+    flow _ s ann = return $ A.vars ann
+    fappAnn _ eff ann = return $ A.vars ann
+    alg = (C.baseVarsAlg :: Algebra Identity Effect (D.Set (Int,C.Boundness))){
+      fflow = flow,
+      fappAnn = fappAnn
+      }
+
+increment i eff' = runIdentity $ C.foldM alg eff'
+  where
+    appAnn _ eff ann = do
+      let ann' = A.increment i ann
+      return $ AppAnn eff ann'
+    flow _ l ann = do
+      let ann' = A.increment i ann
+      return $ Flow l ann'
+    alg = (C.baseIncAlg i $ D.map fst $ D.filter C.bound $ vars eff'){
+      fappAnn = appAnn,
+      fflow = flow
+      }
+
+annApplication fun@(Abs v a1) a2 = increment (-1) $ runIdentity $ C.foldM alg a1
+  where
+    rep ann = 
+      let annAlg = C.baseAppAlg (A.Abs v ann) a2
+      in runIdentity $ C.foldM annAlg ann
+    appAnn _ eff ann = do
+      let ann' = rep ann
+      return $ AppAnn eff ann'
+    flow _ s ann =
+      let ann' = rep ann
+      in return $ Flow s ann'
+    alg = algebra{
+      fappAnn = appAnn,
+      fflow = flow
+      }
+
+annApplication a1 a2 = AppAnn a1 a2
+
+application fun@(Abs _ a1) a2 = increment (-1) $ runIdentity $ C.foldM (C.baseAppAlg fun a2) a1
+application a1 a2 = App a1 a2
+
+reduce' = runIdentity . foldEffectM alg
+  where
+    alg = algebra{
+      fapp = \_ e1 e2 -> return $ application e1 e2,
+      fappAnn = \_ e1 ann -> return $ annApplication e1 ann
+      }
+
+reduce e = go e
+  where
+    go e =
+      let e' = reduce' e
+      in if e == e' then e else go e'    

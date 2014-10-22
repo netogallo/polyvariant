@@ -16,8 +16,7 @@ data Type =
   | Forall S.FlowVariable Type
   deriving (Show,Read,Eq,Ord)
 
-instance C.LambdaCalculus Type Algebra where
-  lambdaDepths = depths
+instance C.Fold Type Algebra where    
   foldM = foldTypeM
   byId i e = runIdentity $ execStateT (C.foldM alg e) Nothing
     where
@@ -32,7 +31,12 @@ instance C.LambdaCalculus Type Algebra where
         ftbool = \i' -> putElem i' TBool
         }
 
-data Algebra m a =
+
+
+instance C.LambdaCalculus Type Algebra where
+  lambdaDepths = depths
+
+data Algebra m t a =
   Algebra{
     farr :: Int -> a -> E.Effect -> a -> m a,
     fann :: Int -> a -> A.Annotation -> m a,
@@ -40,7 +44,7 @@ data Algebra m a =
     ftbool :: Int -> m a
     }
 
-algebra :: Monad m => Algebra m Type
+algebra :: Monad m => Algebra m t Type
 algebra = Algebra{
   farr = \_ a1 eff a2 -> return $ Arr a1 eff a2,
   fann = \_ a1 ann -> return $ Ann a1 ann,
@@ -48,7 +52,7 @@ algebra = Algebra{
   ftbool = \_ -> return TBool
   }
 
-foldTypeM :: Monad m => Algebra m a -> Type -> m a
+foldTypeM :: Monad m => Algebra m Type a -> Type -> m a
 foldTypeM f@Algebra{..} a0 = evalStateT (foldTypeM' undefined a0) 0
   where
     foldTypeM' s a = do

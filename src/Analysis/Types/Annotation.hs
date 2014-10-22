@@ -5,9 +5,7 @@ import qualified Data.Set as D
 import Analysis.Common
 import qualified Data.Map as M
 import Data.Maybe
-import Control.Applicative
 import Control.Monad.Identity
-import Control.Monad (liftM)
 import Control.Monad.State
 import qualified Analysis.Types.Common as C
 
@@ -27,14 +25,48 @@ data Annotation =
     -- adjecent to the other acording to the Ord instance
   deriving (Show,Read,Eq,Ord)
            
-
-
-instance C.LambdaCalculus Annotation Algebra where
-  lambdaDepths = depths
+instance C.Fold Annotation Algebra where
   foldM = foldAnnM
   byId = undefined
 
-data Algebra m a =
+instance C.LambdaCalculus Annotation Algebra where
+  lambdaDepths = depths
+  app (App a1 a2) = Just (a1,a2)
+  app _ = Nothing
+  appC = App
+  var (Var i) = Just i
+  var _ = Nothing
+  varC = Var
+  abst (Abs v e) = Just (v,e)
+  abst _ = Nothing
+  abstC = Abs
+  increment = increment
+  baseAlgebra var abst app =
+    algebra{fvar=var,fabs=abst,fapp=app}
+  groupAlgebra var abst app =
+    Algebra{
+      fvar = var,
+      fabs = abst,
+      fapp = app,
+      flabel = \_ _ -> return C.void,
+      funion = \_  a b -> return $ a C.<+> b,
+      fempty = const $ return C.void
+    }
+
+instance C.WithSets Annotation Algebra where
+  unionM (Union a1 a2) = Just (a1,a2)
+  unionM _ = Nothing
+  unionC = Union
+  setM (Set a) = Just a
+  setM _ = Nothing
+  setC = Set
+  emptyM Empty = Just ()
+  emptyM _ = Nothing
+  emptyC = Empty
+  unionAlgebra alg un empty = alg{funion=un,fempty=empty}
+  
+
+data Algebra m t a =
   Algebra {
     fvar :: Int -> Int -> m a,
     fabs :: Int -> S.FlowVariable -> a -> m a,
@@ -50,7 +82,7 @@ data ReduceContext = ReduceContext{
   freshIx :: Int
   }
 
-algebra :: Monad m => Algebra m Annotation
+algebra :: Monad m => Algebra m Annotation Annotation
 algebra = Algebra{
   fvar = \_ x -> return $ Var x,
   fabs = \_ v s -> return $ Abs v s,
@@ -99,26 +131,12 @@ depths = runIdentity . (foldAnnM alg)
     sing i _ = return $ M.insert i 0 M.empty
     un i ma mb = return $ M.insert i 0 $ M.union ma mb
 
-bound (_,b) = b == C.Bound
-    
-vars = runIdentity . (foldAnnM alg)
+vars :: Annotation -> D.Set (Int, C.Boundness)
+vars = runIdentity . C.foldM alg
   where
-    alg = Algebra {
-      fvar = const fvar,
-      fabs = const fabs,
-      flabel = const $ const $ return D.empty,
-      funion = const funion,
-      fapp = const funion,
-      fempty = const $ return (D.empty :: D.Set (Int,C.Boundness))
-      }
-    funion a b = return $ D.union a b
-    fvar v = return $ D.singleton (v,C.Free)
-    fabs v s =
-      let
-        bounder (v',boundness)
-          | S.name v == v' = (v',C.Bound)
-          | otherwise = (v',boundness)
-      in return $ D.insert (S.name v, C.Bound) $ D.map bounder s
+--    alg :: Monad m => Algebra (StateT (D.Set (Int,C.Boundness)) m) Annotation (D.Set (Int,C.Boundness))
+    alg = C.baseVarsAlg
+
 
 renameByLambdasOffset base offset obj = lift calcReplacements  >>= mkReplacements
   where
@@ -161,46 +179,12 @@ replace rep = runIdentity . (foldAnnM alg)
       }
 
 -- Increase or decrease the `depth` of all bound variables in the expression
-increment i ann = runIdentity $ foldAnnM (alg $ D.map fst $ D.filter bound $ vars ann) ann
+increment i ann = runIdentity $ foldAnnM alg ann
   where
-    fvar vars _ v
-      | D.member v vars = return $ Var $ v + i
-      | otherwise = return $ Var v
-    fabs vars _ v s
-      | D.member (S.name v) vars = return $ Abs v{S.name = i + S.name v} s
-      | otherwise = return $ Abs v s
-    alg vars = algebra{
-      fvar = fvar vars,
-      fabs = fabs vars
-      }
+    alg = C.baseIncAlg i $ D.map fst $ D.filter C.bound $ vars ann
 
-application fun@(Abs var a1) a2 =
-  increment (-1) $ runIdentity $ foldAnnM (alg $ depths a1) a1
-  where
-    a2' = increment 1 a2
-    fvar depths i v
-      | S.name var == v =
-        let d = M.lookup i depths
-        in case d of
-          Just d' | d' > 0 -> return $ increment d' a2'
-          Just _ -> return a2'
-          Nothing -> fail "No depth for expression!"
-      | otherwise = return $ Var v
-    alg depths = algebra{
-      fvar = fvar depths
-      }
+application fun@(Abs _ a1) a2 = increment (-1) $ runIdentity $ C.foldM (C.baseAppAlg fun a2) a1
 application a1 a2 = App a1 a2
-
--- application :: (Monad m, Functor m) => Annotation -> Annotation -> StateT ReduceContext m Annotation
--- application (Abs v a1) a2 = do
---   a1' <- (flip rename a1) . M.fromList <$> mapM (\v' -> (v',) <$> fresh) newVars
---   return $ replace (M.fromList [(S.name v,a2)]) a1'
-
---   where
---     varsA1 = D.map fst $ vars a1
---     freeA2 = D.map fst $ D.filter ((== Free) . snd) $ vars a2
---     newVars = D.toList $ D.intersection varsA1 freeA2
--- application a1 a2 = return $ App a1 a2
 
 reduce' = runIdentity . (foldAnnM alg)
   where
@@ -238,7 +222,7 @@ normalize :: Annotation -> Annotation
 normalize ann =
   -- The second `renameByLambdas` is there only to ensure that all
   -- terms are equal to alpha renaming of the free variables
-  unions $ reduce $ renameByLambdas ann
+  C.unions $ reduce $ renameByLambdas ann
   
 recombine (Var s) = D.singleton $ Var s
 -- recombine (App (Abs v ann) ann2) = cartesian App (recombine ann1) (recombine ann2)

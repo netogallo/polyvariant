@@ -1,0 +1,7 @@
+Equiv (Abs (Var {name = 3, sort = Ann}) (App (Abs (Var {name = 2, sort = Ann}) (Union (Abs (Var {name = 2, sort = Ann}) (Abs (Var {name = 1, sort = Ann}) Empty)) (Abs (Var {name = 1, sort = Ann}) (App (Var 3) (App (Var 2) (Abs (Var {name = 2, sort = Ann}) (Var 2))))))) (Label "27"))) (App (Abs (Var {name = 4, sort = Ann}) (App (Abs (Var {name = 5, sort = Ann}) (App (Abs (Var {name = 6, sort = Ann}) (Abs (Var {name = 3, sort = Ann}) (App (Abs (Var {name = 2, sort = Ann}) (Union (Var 5) (Abs (Var {name = 1, sort = Ann}) (App (Var 3) (Var 4))))) (Var 6)))) (Label "27"))) (Abs (Var {name = 2, sort = Ann}) (Abs (Var {name = 1, sort = Ann}) Empty)))) (App (Var 2) (Abs (Var {name = 2, sort = Ann}) (Var 2))))
+
+(Abs (Var {name = 2, sort = Ann}) (Union (Abs (Var {name = 3, sort = Ann}) (Abs (Var {name = 1, sort = Ann}) (App (Var 2) (App (Abs (Var {name = 2, sort = Ann}) (Var 3)) Empty)))) (Var 2))) 
+
+(App (Abs (Var {name = 4, sort = Ann}) (Abs (Var {name = 2, sort = Ann}) (Union (Var 4) (Var 2)))) 
+
+(Abs (Var {name = 3, sort = Ann}) (Abs (Var {name = 1, sort = Ann}) (App (Var 2) (App (Abs (Var {name = 2, sort = Ann}) (Var 3)) Empty)))))

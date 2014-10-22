@@ -2,6 +2,7 @@ module Analysis.Types.AnnotationTests where
 
 import Analysis.Types.Annotation
 import qualified Analysis.Types.Sorts as S
+import qualified Analysis.Types.Common as C
 import Test.QuickCheck.Gen
 import Test.QuickCheck
 import Control.Applicative
@@ -29,7 +30,7 @@ instance Arbitrary Annotation where
           _ -> return Empty
       mkBound expr =
         let
-          free = D.filter (not . bound) $ vars expr
+          free = D.filter (not . C.bound) $ vars expr
         in D.fold (\(v,_) s -> Abs (S.Var v S.Ann) s) expr free
           
   shrink x =
@@ -103,7 +104,7 @@ randomReplace v a = do
         Just _ -> yes
     maybeReplace elem = do
       let
-        canReplace = D.isSubsetOf (D.filter (not . bound) $ vars elem) D.empty
+        canReplace = D.isSubsetOf (D.filter (not . C.bound) $ vars elem) D.empty
       r <- lift arbitrary
       case r of
         True | canReplace -> do
