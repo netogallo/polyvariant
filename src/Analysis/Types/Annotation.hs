@@ -52,6 +52,7 @@ instance C.LambdaCalculus Annotation Algebra where
       funion = \_  a b -> return $ a C.<+> b,
       fempty = const $ return C.void
     }
+  vars = vars
 
 instance C.WithSets Annotation Algebra where
   unionM (Union a1 a2) = Just (a1,a2)

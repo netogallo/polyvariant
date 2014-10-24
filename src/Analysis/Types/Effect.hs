@@ -50,6 +50,30 @@ instance C.LambdaCalculus Effect Algebra where
       fflow = \_ _ _ -> return C.void,
       fempty = \_ -> return C.void
       }
+  vars = vars
+
+instance C.WithSets Effect Algebra where
+  unionM (Union a b) = Just (a,b)
+  unionM _ = Nothing
+  unionC = Union
+
+  setM (Set a) = Just a
+  setM _ = Nothing
+  setC = Set
+
+  emptyM Empty = Just ()
+  emptyM _ = Nothing
+
+  unionAlgebra alg union void = alg{
+    funion = union,
+    fempty = void
+    }
+
+  groupUnionAlgebra alg union void =
+    alg{
+      funion = union,
+      fempty = void
+      }
 
 data Algebra m t a =
   Algebra {
@@ -186,3 +210,5 @@ reduce e = go e
     go e =
       let e' = reduce' e
       in if e == e' then e else go e'    
+
+normalize = C.unions . reduce . renameByLambdas

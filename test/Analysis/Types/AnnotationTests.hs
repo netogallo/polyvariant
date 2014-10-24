@@ -3,6 +3,7 @@ module Analysis.Types.AnnotationTests where
 import Analysis.Types.Annotation
 import qualified Analysis.Types.Sorts as S
 import qualified Analysis.Types.Common as C
+import qualified Analysis.Types.CommonTests as CT
 import Test.QuickCheck.Gen
 import Test.QuickCheck
 import Control.Applicative
@@ -92,41 +93,10 @@ maybeRuleProb p r s = do
 maybeRule = maybeRuleProb (0,1)
 
 randomReplace v a = do
-  (ann, s) <- runStateT (foldAnnM alg a) Nothing
+  (ann, s) <- runStateT (foldAnnM (CT.randomReplaceAlg v) a) Nothing
   case s of
     Nothing -> return Nothing
-    Just s' -> return $ Just (ann, s')
-  where
-    ifReplaced yes no = do
-      r <- get
-      case r of
-        Nothing -> no
-        Just _ -> yes
-    maybeReplace elem = do
-      let
-        canReplace = D.isSubsetOf (D.filter (not . C.bound) $ vars elem) D.empty
-      r <- lift arbitrary
-      case r of
-        True | canReplace -> do
-          put $ Just elem
-          return $ Var v
-        _ -> return elem
-    single c _ v =
-      ifReplaced (return $ c v) (maybeReplace (c v))
-    fun c _ a1 a2 =
-      ifReplaced (return $ c a1 a2) (maybeReplace (c a1 a2))
-    fabs _ v ann =
-      ifReplaced (return $ Abs v ann) (maybeReplace (Abs v ann))
-      
-    alg = Algebra{
-      fvar = \i var -> return $ Var var,
-      flabel = single Label,
-      fapp = fun App,
-      funion = fun Union,
-      fabs = fabs,
-      fempty = const (return Empty)
-      }
-      
+    Just s' -> return $ Just (ann, s')      
 
 betaEq a = do
   mRep <- randomReplace var a

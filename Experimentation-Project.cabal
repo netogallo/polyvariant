@@ -23,6 +23,7 @@ executable Experimentation-Project
                        ,Analysis.Types.Effect
                        ,Analysis.Types.Annotation
                        ,Analysis.Types.AnnotationTests
+                       ,Analysis.Types.EffectTests
                        ,Analysis.Algorithms.Completion
                        
   -- other-extensions:    

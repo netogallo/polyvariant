@@ -36,6 +36,7 @@ class LambdaCalculus a alg | a -> alg where
   increment :: Int -> a -> a
   baseAlgebra :: Monad m => (Int -> Int -> m a) -> (Int -> S.FlowVariable -> a -> m a) -> (Int -> a -> a -> m a) -> alg m a a
   groupAlgebra :: (Group g, Monad m) => (Int -> Int -> m g) -> (Int -> S.FlowVariable -> g -> m g) -> (Int -> g -> g -> m g) -> alg m a g
+  vars :: a -> D.Set (Int,Boundness)
 
 class LambdaCalculus a alg => WithSets a alg | a -> alg where
   unionM :: a -> Maybe (a,a)
@@ -45,7 +46,7 @@ class LambdaCalculus a alg => WithSets a alg | a -> alg where
   emptyM :: a -> Maybe ()
   emptyC :: a
   unionAlgebra :: (Monad m, Ord a) => alg m a a -> (Int -> a -> a -> m a) -> (Int -> m a) -> alg m a a
-  groupUnionAlgebra :: (Monad m, Ord x) => alg m a x -> (Int -> x -> x -> m x) -> (Int -> m a) -> alg m a x
+  groupUnionAlgebra :: (Monad m, Ord x) => alg m a x -> (Int -> x -> x -> m x) -> (Int -> m x) -> alg m a x
 
 defAlgebra :: (Monad m, LambdaCalculus a alg) => alg m a a
 defAlgebra = baseAlgebra baseVar baseAbst baseApp
@@ -157,3 +158,4 @@ unions = runIdentity . foldM alg
         (a1',a2') -> setC $ D.fromList [a1',a2']
     emptyF _ = return $ setC D.empty
     alg = unionAlgebra defAlgebra unionF emptyF
+
