@@ -7,6 +7,9 @@ import Control.Monad.State
 import qualified Data.Map as M
 import Control.Monad.Identity
 import qualified Analysis.Types.Common as C
+import Data.Maybe (fromJust)
+import Control.Applicative
+import Debug.Trace
 
 data Effect =
   Var Int
@@ -133,25 +136,43 @@ depths = runIdentity . (foldEffectM alg)
       }
     sing i _ = return $ M.insert i 0 M.empty
     un i ma mb = return $ M.insert i 0 $ M.union ma mb
-    
-renameByLambdasOffset base offset obj = lift calcReplacements >>= mkReplacements
+
+
+renameByLambdasOffset base' offset obj = lift calcReplacements >>= mkReplacements
   where
-    calcReplacements = foldEffectM repAlg obj
-    repAlg = Algebra{
-      fvar = C.discard $ C.rename base,
-      fapp = C.rename2 base,
-      fappAnn = \i s _ -> C.rename1 base i s,
-      fabs = C.renameAbs base offset obj,
-      funion = C.rename2 base,
-      fflow = C.discard $ C.discard $ C.rename base,
-      fempty = const (return M.empty)
+    base = M.map (\e -> (e,True)) base'
+    d = depths obj
+    repAlg = (C.baseRepAlg base' offset obj :: Algebra Identity Effect (M.Map Int (M.Map Int (Int,Bool)))){
+      fflow = \i _ _ -> return $ M.fromList [(i,base)],
+      fappAnn = \i e _ -> return $ M.insert i base $ e
       }
-    subAlg rep =  algebra{
-      fvar = C.subVar Var rep,
-      fabs = C.subAbs Abs rep,
-      fappAnn = A.subAppAnn AppAnn obj rep
+    calcReplacements = M.map (M.map fst) <$> foldEffectM repAlg obj
+    renAnn rep i ann = A.renameByLambdasOffset (fromJust $ M.lookup i rep) (fromJust $ M.lookup i d) ann
+    subAlg rep = (C.baseSubAlg rep){
+      fappAnn = \i e ann -> AppAnn e <$> renAnn rep i ann,
+      fflow = \i l ann -> Flow l <$> renAnn rep i ann
       }
     mkReplacements rep = foldEffectM (subAlg rep) obj
+
+
+-- renameByLambdasOffset base offset obj = lift calcReplacements >>= mkReplacements
+--   where
+--     calcReplacements = foldEffectM repAlg obj
+--     repAlg = Algebra{
+--       fvar = C.discard $ C.rename base,
+--       fapp = C.rename2 base,
+--       fappAnn = \i s _ -> C.rename1 base i s,
+--       fabs = C.renameAbs base offset obj,
+--       funion = C.rename2 base,
+--       fflow = C.discard $ C.discard $ C.rename base,
+--       fempty = const (return M.empty)
+--       }
+--     subAlg rep =  algebra{
+--       fvar = C.subVar Var rep,
+--       fabs = C.subAbs Abs rep,
+--       fappAnn = A.subAppAnn AppAnn obj rep
+--       }
+--     mkReplacements rep = foldEffectM (subAlg rep) obj
 
 renameByLambdas obj = runIdentity $ evalStateT (renameByLambdasOffset M.empty 0 obj) (-1 :: Int, M.empty)
 
@@ -159,7 +180,7 @@ vars :: Effect -> D.Set (Int,C.Boundness)
 vars = runIdentity . C.foldM alg
   where
     flow _ s ann = return $ A.vars ann
-    fappAnn _ eff ann = return $ A.vars ann
+    fappAnn _ eff ann = return $ D.union eff $ A.vars ann
     alg = (C.baseVarsAlg :: Algebra Identity Effect (D.Set (Int,C.Boundness))){
       fflow = flow,
       fappAnn = fappAnn
@@ -167,13 +188,15 @@ vars = runIdentity . C.foldM alg
 
 increment i eff' = runIdentity $ C.foldM alg eff'
   where
+    boundVars = D.filter C.bound $ vars eff'
+    annIncrement = A.incrementWithBase boundVars
     appAnn _ eff ann = do
-      let ann' = A.increment i ann
+      let ann' = annIncrement i ann
       return $ AppAnn eff ann'
     flow _ l ann = do
-      let ann' = A.increment i ann
+      let ann' = annIncrement i ann
       return $ Flow l ann'
-    alg = (C.baseIncAlg i $ D.map fst $ D.filter C.bound $ vars eff'){
+    alg = (C.baseIncAlg i $ D.map fst boundVars){
       fappAnn = appAnn,
       fflow = flow
       }
@@ -202,8 +225,16 @@ application a1 a2 = App a1 a2
 reduce' = runIdentity . foldEffectM alg
   where
     alg = algebra{
-      fapp = \_ e1 e2 -> return $ application e1 e2,
-      fappAnn = \_ e1 ann -> return $ annApplication e1 ann
+      fapp = \_ e1 e2 -> let
+         r = application e1 e2
+         in
+          return r,
+          -- trace ("App: " ++ show (e1,e2,r)) $ return $ application e1 e2,
+      fappAnn = \_ e1 ann -> let
+        r = annApplication e1 ann
+        in
+         return r
+         -- trace ("AApp: " ++ show (e1,ann,r)) $ return $ annApplication e1 ann
       }
 
 reduce e = go e
@@ -212,4 +243,4 @@ reduce e = go e
       let e' = reduce' e
       in if e == e' then e else go e'    
 
-normalize = C.unions . reduce . renameByLambdas
+normalize = C.unions . renameByLambdas . reduce . renameByLambdas

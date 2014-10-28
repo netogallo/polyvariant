@@ -16,7 +16,7 @@ import Control.Monad.Identity
 
 data Equiv = Equiv Effect Effect deriving Show
 
-arbitraryWithSort sort' = arbitrary' [] sort'
+arbitraryWithSort sort' = arbitrary' M.empty sort'
   where
     arbitrary' gamma sort = do
       pEff <- elements [1..20]
@@ -29,14 +29,14 @@ arbitraryWithSort sort' = arbitrary' [] sort'
           mkAppAnn = do
             e1 <- arbitrary' gamma (S.Arr S.Ann sort)
             e2 <- arbitrary
-            return $ App e1 e2
-      var <- case filter (\(_,sort'') -> sort == sort'') gamma of
+            return $ AppAnn e1 e2
+      var <- case filter (\(_,sort'') -> sort == sort'') $ M.toList gamma of
         [] -> return Nothing
         vs -> Just . fst <$> elements vs
       eff <- case sort of
         S.Arr s1 s2 -> do
           v <- elements varRange
-          eff <- arbitrary' ((v,s1) : gamma) s2
+          eff <- arbitrary' (M.insert v s1 gamma) s2
           return $ Abs (S.Var v s1) eff
         S.Eff | pEff < 5 -> Flow <$> lbl <*> arbitrary
         S.Eff | pEff < 10 -> return Empty

@@ -8,6 +8,7 @@ import Data.Maybe
 import Control.Monad.Identity
 import Control.Monad.State
 import qualified Analysis.Types.Common as C
+import Control.Applicative
 
 data Annotation =
   Var Int
@@ -138,27 +139,10 @@ vars = runIdentity . C.foldM alg
 --    alg :: Monad m => Algebra (StateT (D.Set (Int,C.Boundness)) m) Annotation (D.Set (Int,C.Boundness))
     alg = C.baseVarsAlg
 
-
--- renameByLambdasOffset base offset obj = lift calcReplacements  >>= mkReplacements
---   where
---     calcReplacements = foldAnnM repAlg obj
---     repAlg = Algebra{
---       fvar = C.discard $ C.rename base,
---       flabel = C.discard $ C.rename base,
---       funion = C.rename2 base,
---       fapp = C.rename2 base,
---       fabs = C.renameAbs base offset obj,
---       fempty = const $ return M.empty
---       }
---     subAlg rep = algebra{
---       fvar = C.subVar Var rep,
---       fabs = C.subAbs Abs rep
---       }
---     mkReplacements rep = foldAnnM (subAlg rep) obj
-
 renameByLambdasOffset base offset obj = lift calcReplacements >>= mkReplacements
   where
-    calcReplacements = foldAnnM (C.baseRepAlg base offset obj :: Algebra Identity Annotation (M.Map Int (M.Map Int Int))) obj
+    calcReplacements =
+      M.map (M.map fst) <$> foldAnnM (C.baseRepAlg base offset obj :: Algebra Identity Annotation (M.Map Int (M.Map Int (Int,Bool)))) obj
     mkReplacements rep = foldAnnM (C.baseSubAlg rep) obj
 
 renameByLambdas :: Annotation -> Annotation
@@ -186,9 +170,11 @@ replace rep = runIdentity . (foldAnnM alg)
       }
 
 -- Increase or decrease the `depth` of all bound variables in the expression
-increment i ann = runIdentity $ foldAnnM alg ann
+incrementWithBase base i ann = runIdentity $ foldAnnM alg ann
   where
-    alg = C.baseIncAlg i $ D.map fst $ D.filter C.bound $ vars ann
+    alg = C.baseIncAlg i $ D.map fst $ D.filter C.bound $ D.union base $ vars ann
+
+increment = incrementWithBase D.empty
 
 application fun@(Abs _ a1) a2 = increment (-1) $ runIdentity $ C.foldM (C.baseAppAlg fun a2) a1
 application a1 a2 = App a1 a2

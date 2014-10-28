@@ -70,22 +70,11 @@ baseGAbst _ _ a = return a
 
 baseGApp _ a b = return $ a <+> b
 
-discard f = \x -> \_ -> f x
-
-rename base i = return $ M.insert i base M.empty
-
-rename1 base i s = return $ M.insert i base s
-
-rename2 base i s1 s2 = return $ M.insert i base $ M.union s1 s2
-
-renameAbs base offset obj i v s =
-  let
-    d = 1 + offset + (fromJust $ M.lookup i $ lambdaDepths obj)
-    -- If a replacement is already 2defined for the variable, leave it that way
-    -- since this variable must habe been bound earlier
-  in return $ M.map (M.insertWith (\_ d' -> d') (S.name v) d) $ M.insert i base s
-
 bound (_,b) = b == Bound
+
+renameAbs = undefined
+rename1 = undefined
+rename2 = undefined
 
 subVar vcons rep i v = do
   let rep' = fromJust $ M.lookup i rep
@@ -103,17 +92,26 @@ subAbs acons rep i v e =
   let rep' = fromJust $ M.lookup i rep
   in return $ acons v{S.name=fromJust $ M.lookup (S.name v) rep'} e
 
-baseRepAlg base offset e = groupAlgebra varF abstF appF
+baseRepAlg base'' offset e = groupAlgebra varF abstF appF
   where
     d = M.map (+1) $ lambdaDepths e
+    base = M.map (\e -> (e,True)) base''
     varF i _ = return $ M.fromList [(i,base)]
+    insertIfIsBase (rep1,b1) (rep2,b2)
+      -- Check if the replacement is from the base set of
+      -- replacements. In such a case, the replacement
+      -- should be preformed since there is a bounder
+      -- for the variable
+      | b2 = (rep1,b1)
+      | otherwise = (rep2,b2)
+
     abstF i v reps =
       let
         name = offset + (fromJust $ M.lookup i d)
         -- If a replacement is already there, leave it since
         -- it must be bound by a deeper lambda
-        m' = M.map (M.insertWith (\_ c -> c) (S.name v) name) reps
-        base' = M.insert (S.name v) name base
+        m' = M.map (M.insertWith insertIfIsBase (S.name v) (name,False)) reps
+        base' = M.insert (S.name v) (name,False) base
       in return $ M.insert i base' $ m'
     appF i ma mb = return $ M.insert i base $ M.union ma mb
 
@@ -132,19 +130,34 @@ baseSubAlg rep = baseAlgebra varF abstF appF
     abstF i var e = return $ abstC var{S.name=fromJust $ getVar i (S.name var)} e
     appF _ a1 a2 = return $ appC a1 a2
 
-baseUnionRepAlg base offset e = groupUnionAlgebra (baseRepAlg base offset e) unionF emptyF
+baseUnionRepAlg base' offset e = groupUnionAlgebra (baseRepAlg base' offset e) unionF emptyF
   where
+    base = M.map (\e -> (e,True)) base'
     unionF i ma mb = return $ M.insert i base $ M.union ma mb
     emptyF i = return $ M.fromList [(i,base)]
     
+shadows v = runIdentity . foldM alg
+  where
+    alg = groupAlgebra varF abstF appF
+    appF _ s1 s2 = return $ M.union s1 s2
+    varF i v'
+      | v == v' = return $ M.fromList [(i,False)]
+      | otherwise = return M.empty
+    abstF i v' s
+      | S.name v' == v = return $ M.map (const True) s
+      | otherwise = return s
 
+baseAppAlg :: (Fold a alg,LambdaCalculus a alg, Monad m) => a -> a -> alg m a a
 baseAppAlg (abst -> Just (var,a1)) a2 = alg $ lambdaDepths a1
   where
+    shadowedVars = shadows (S.name var) a1
     a2' = increment 1 a2
     fvar depths i v
       | S.name var == v =
         let d = M.lookup i depths
+            isShadowed = fromJust $ M.lookup i shadowedVars
         in case d of
+          _ | isShadowed -> return $ varC v
           Just d' | d' > 0 -> return $ increment d' a2'
           Just _ -> return a2'
           Nothing -> fail "No depth for expression!"
