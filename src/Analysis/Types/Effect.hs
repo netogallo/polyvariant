@@ -127,7 +127,7 @@ depths = runIdentity . (foldEffectM alg)
       funion = un,
       fabs = \i _ s -> return $ M.insert i 0 $ M.map (+1) s,
       fvar = sing,
-      fappAnn = \i s _ -> return $ M.insert i 0 $ M.map (+1) s,
+      fappAnn = \i s _ -> return $ M.insert i 0 s,
       fflow = \i _ _ -> return $ M.insert i 0 M.empty,
       fempty = const (return M.empty)
       }

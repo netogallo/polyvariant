@@ -139,23 +139,29 @@ vars = runIdentity . C.foldM alg
     alg = C.baseVarsAlg
 
 
-renameByLambdasOffset base offset obj = lift calcReplacements  >>= mkReplacements
-  where
-    calcReplacements = foldAnnM repAlg obj
-    repAlg = Algebra{
-      fvar = C.discard $ C.rename base,
-      flabel = C.discard $ C.rename base,
-      funion = C.rename2 base,
-      fapp = C.rename2 base,
-      fabs = C.renameAbs base offset obj,
-      fempty = const $ return M.empty
-      }
-    subAlg rep = algebra{
-      fvar = C.subVar Var rep,
-      fabs = C.subAbs Abs rep
-      }
-    mkReplacements rep = foldAnnM (subAlg rep) obj
+-- renameByLambdasOffset base offset obj = lift calcReplacements  >>= mkReplacements
+--   where
+--     calcReplacements = foldAnnM repAlg obj
+--     repAlg = Algebra{
+--       fvar = C.discard $ C.rename base,
+--       flabel = C.discard $ C.rename base,
+--       funion = C.rename2 base,
+--       fapp = C.rename2 base,
+--       fabs = C.renameAbs base offset obj,
+--       fempty = const $ return M.empty
+--       }
+--     subAlg rep = algebra{
+--       fvar = C.subVar Var rep,
+--       fabs = C.subAbs Abs rep
+--       }
+--     mkReplacements rep = foldAnnM (subAlg rep) obj
 
+renameByLambdasOffset base offset obj = lift calcReplacements >>= mkReplacements
+  where
+    calcReplacements = foldAnnM (C.baseRepAlg base offset obj :: Algebra Identity Annotation (M.Map Int (M.Map Int Int))) obj
+    mkReplacements rep = foldAnnM (C.baseSubAlg rep) obj
+
+renameByLambdas :: Annotation -> Annotation
 renameByLambdas obj = runIdentity $ evalStateT (renameByLambdasOffset M.empty 0 obj) (-1 :: Int,M.empty)
 
 subAppAnn cons obj rep i s ann = do

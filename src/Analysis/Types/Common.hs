@@ -103,6 +103,41 @@ subAbs acons rep i v e =
   let rep' = fromJust $ M.lookup i rep
   in return $ acons v{S.name=fromJust $ M.lookup (S.name v) rep'} e
 
+baseRepAlg base offset e = groupAlgebra varF abstF appF
+  where
+    d = M.map (+1) $ lambdaDepths e
+    varF i _ = return $ M.fromList [(i,base)]
+    abstF i v reps =
+      let
+        name = offset + (fromJust $ M.lookup i d)
+        -- If a replacement is already there, leave it since
+        -- it must be bound by a deeper lambda
+        m' = M.map (M.insertWith (\_ c -> c) (S.name v) name) reps
+        base' = M.insert (S.name v) name base
+      in return $ M.insert i base' $ m'
+    appF i ma mb = return $ M.insert i base $ M.union ma mb
+
+baseSubAlg rep = baseAlgebra varF abstF appF
+  where
+    getVar i v =
+      M.lookup v $ fromJust $ M.lookup i rep
+    varF i v = do
+      (fresh,free) <- get
+      case (getVar i v,M.lookup v free) of
+        (Nothing,Nothing) -> do
+          put (fresh + 1,M.insert v fresh free)
+          return $ varC fresh
+        (Nothing,Just i') -> return $ varC i'
+        (Just i',_) -> return $ varC i'
+    abstF i var e = return $ abstC var{S.name=fromJust $ getVar i (S.name var)} e
+    appF _ a1 a2 = return $ appC a1 a2
+
+baseUnionRepAlg base offset e = groupUnionAlgebra (baseRepAlg base offset e) unionF emptyF
+  where
+    unionF i ma mb = return $ M.insert i base $ M.union ma mb
+    emptyF i = return $ M.fromList [(i,base)]
+    
+
 baseAppAlg (abst -> Just (var,a1)) a2 = alg $ lambdaDepths a1
   where
     a2' = increment 1 a2
