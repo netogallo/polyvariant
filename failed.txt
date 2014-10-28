@@ -1,7 +1,10 @@
-Equiv (Abs (Var {name = 3, sort = Ann}) (App (Abs (Var {name = 2, sort = Ann}) (Union (Abs (Var {name = 2, sort = Ann}) (Abs (Var {name = 1, sort = Ann}) Empty)) (Abs (Var {name = 1, sort = Ann}) (App (Var 3) (App (Var 2) (Abs (Var {name = 2, sort = Ann}) (Var 2))))))) (Label "27"))) (App (Abs (Var {name = 4, sort = Ann}) (App (Abs (Var {name = 5, sort = Ann}) (App (Abs (Var {name = 6, sort = Ann}) (Abs (Var {name = 3, sort = Ann}) (App (Abs (Var {name = 2, sort = Ann}) (Union (Var 5) (Abs (Var {name = 1, sort = Ann}) (App (Var 3) (Var 4))))) (Var 6)))) (Label "27"))) (Abs (Var {name = 2, sort = Ann}) (Abs (Var {name = 1, sort = Ann}) Empty)))) (App (Var 2) (Abs (Var {name = 2, sort = Ann}) (Var 2))))
+Equiv (App (Abs (Var {name = 1, sort = Eff}) (Var 1)) (Flow "100" (App (Abs (Var {name = 1, sort = Ann}) (Union (Label "84") (Label "46"))) (Label "13")))) (AppAnn (Abs (Var {name = 4, sort = Ann}) (App (Abs (Var {name = 3, sort = Ann}) (App (Var 3) (Flow "100" (App (Var 4) (Label "13"))))) (App (Abs (Var {name = 2, sort = Ann}) (Var 2)) (Abs (Var {name = 1, sort = Eff}) (Var 1))))) (Abs (Var {name = 1, sort = Ann}) (Union (Label "84") (Label "46"))))
 
-(Abs (Var {name = 2, sort = Ann}) (Union (Abs (Var {name = 3, sort = Ann}) (Abs (Var {name = 1, sort = Ann}) (App (Var 2) (App (Abs (Var {name = 2, sort = Ann}) (Var 3)) Empty)))) (Var 2))) 
+Equiv (App (Abs (Var {name = 2, sort = Ann}) (Flow "12" (Abs (Var {name = 1, sort = Ann}) (App (Abs (Var {name = 2, sort = Ann}) (Var 1)) (Label "89"))))) Empty) (App (Abs (Var {name = 2, sort = Ann}) (AppAnn (Abs (Var {name = 3, sort = Ann}) (Flow "12" (Var 3))) (Abs (Var {name = 1, sort = Ann}) (App (Abs (Var {name = 2, sort = Ann}) (Var 1)) (Label "89"))))) (Union Empty (Union Empty Empty)))
 
-(App (Abs (Var {name = 4, sort = Ann}) (Abs (Var {name = 2, sort = Ann}) (Union (Var 4) (Var 2)))) 
+Equiv (Union (Flow "42" (Abs (Var {name = 3, sort = Ann}) (Var 3))) (App (Abs (Var {name = 3, sort = Eff}) (Var 3)) Empty)) (AppAnn (Abs (Var {name = 4, sort = Ann}) (Union (Flow "42" (Var 4)) (App (Abs (Var {name = 3, sort = Eff}) (Var 3)) Empty))) (Abs (Var {name = 3, sort = Ann}) (Var 3)))
 
-(Abs (Var {name = 3, sort = Ann}) (Abs (Var {name = 1, sort = Ann}) (App (Var 2) (App (Abs (Var {name = 2, sort = Ann}) (Var 3)) Empty)))))
+
+(Flow "80" (Abs (Var {name = 3, sort = Ann}) (Var 3))) 
+
+(AppAnn (Abs (Var {name = 4, sort = Ann}) (Flow "80" (Var 4))) (Abs (Var {name = 3, sort = Ann}) (Var 3)))

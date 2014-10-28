@@ -3,7 +3,7 @@ module Analysis.Types.Common where
 import qualified Data.Map as M
 import qualified Analysis.Types.Sorts as S
 import Data.Maybe
-import Control.Monad.State (put,get,modify,StateT)
+import Control.Monad.State (put,get,StateT)
 import qualified Data.Set as D
 import Control.Monad.Identity (runIdentity)
 
@@ -20,6 +20,10 @@ class Group a where
 instance Ord a => Group (D.Set a) where
   void = D.empty
   (<+>) = D.union
+
+instance Ord k => Group (M.Map k v) where
+  void = M.empty
+  (<+>) = M.union
 
 class Fold a alg | a -> alg where
   byId :: Int -> a -> Maybe a

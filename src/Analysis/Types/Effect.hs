@@ -63,6 +63,7 @@ instance C.WithSets Effect Algebra where
 
   emptyM Empty = Just ()
   emptyM _ = Nothing
+  emptyC = Empty
 
   unionAlgebra alg union void = alg{
     funion = union,

@@ -7,16 +7,18 @@ import qualified Data.Set as D
 import qualified Control.Monad as M
 import Control.Applicative
 import Control.Monad.State hiding (foldM)
+import qualified Data.Map as Ma
 
 (\\) (_:xs) 0 = xs
 (\\) (x:xs) i = x : xs \\ (i-1)
 
 shuffle :: [a] -> Gen [a]
-shuffle s' = snd <$> (M.foldM cata (s',[]) $ replicate (length s') ())
+shuffle s'@(_:_) = snd <$> (M.foldM cata (s',[]) $ replicate (length s') ())
   where
     cata (s,e) _ = do
       i <- choose (0,length s - 1)
       return (s \\ i,s !! i : e)
+shuffle [] = return []
 
 asocEq :: (Fold a alg, WithSets a alg, Ord a) => a -> Gen a
 asocEq (unionM -> Just (x,y)) = do
@@ -37,17 +39,18 @@ identEq e = do
     (unionM -> Just (a,b)) | which -> unionC a $ unionC a b
     (unionM -> Just (a,b)) -> unionC (unionC a b) b
     (emptyM -> Just _) -> unionC emptyC emptyC
+    _ -> e
 
 maybeRuleProb p r s = do
   apply <- choose p
-  if apply <= (1 :: Int)
+  if apply < (1 :: Int)
     then r s
     else return s
 
 unionEq p =
-  maybeRuleProb (1,p) asocEq M.>=>
-  maybeRuleProb (1,p) identEq M.>=>
-  maybeRuleProb (1,p) emptyEq
+  maybeRuleProb (0,p) asocEq M.>=>
+  maybeRuleProb (0,p) identEq M.>=>
+  maybeRuleProb (0,p) emptyEq
 
 randomReplaceAlg :: (WithSets a alg, Ord a) => Int -> alg (StateT (Maybe a) Gen) a a
 randomReplaceAlg v = alg
@@ -72,6 +75,30 @@ randomReplaceAlg v = alg
       ifReplaced (return $ abstC v ann) (maybeReplace (abstC v ann))
     alg = unionAlgebra (baseAlgebra baseVar repAbst (repDual appC)) (repDual unionC) (const $ return emptyC)
 
-betaEq a = do
-  mRep <- runStateT $ foldM (randomReplaceAlg a) Nothing
-  return ()
+-- betaEq a = do
+--   mRep <- runStateT $ foldM (randomReplaceAlg a) Nothing
+--   return ()
+
+mapASTAlg f = baseAlgebra varF abstF appF
+  where
+    varF i v = f i $ varC v
+    abstF i v e = f i $ abstC v e
+    appF i e1 e2 = f i $ appC e1 e2
+
+mapASTUnionAlg f = unionAlgebra (mapASTAlg f) unionF emptyF
+  where
+    unionF i e1 e2 = f i $ unionC e1 e2
+    emptyF i = f i $ emptyC
+
+baseProbAlg :: (Monad m, LambdaCalculus a alg) => alg m a (Ma.Map Int Int)
+baseProbAlg = groupAlgebra varF abstF appF
+  where
+    varF i _ = return $ Ma.fromList [(i,1)]
+    abstF i _ m = return $ Ma.insert i 1 $ Ma.map (+1) m
+    appF i m1 m2 = return $ Ma.insert i 1 $ Ma.map (+1) $ Ma.union m1 m2
+
+baseProbUnionAlg :: (Monad m, WithSets a alg, LambdaCalculus a alg) => alg m a (Ma.Map Int Int)
+baseProbUnionAlg = groupUnionAlgebra baseProbAlg unionF emptyF
+  where
+    emptyF i = return $ Ma.fromList [(i,1)]
+    unionF i m1 m2 = return $ Ma.insert i 1 $ Ma.map (+1) $ Ma.union m1 m2

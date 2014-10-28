@@ -10,6 +10,11 @@ import Analysis.Types.SortsTests()
 import qualified Analysis.Types.Sorts as S
 import Control.Monad.State
 import qualified Data.Set as D
+import qualified Data.Map as M
+import Data.Maybe (fromJust)
+import Control.Monad.Identity
+
+data Equiv = Equiv Effect Effect deriving Show
 
 arbitraryWithSort sort' = arbitrary' [] sort'
   where
@@ -58,6 +63,12 @@ instance Arbitrary Effect where
     where
       shrinkMerge c a1 a2 = [Empty,a1,a2] ++ [c a1' a2' | (a1',a2') <- shrink (a1,a2)]
 
+instance Arbitrary Equiv where
+  arbitrary = do
+    e <- arbitrary
+    Equiv e <$> randomRewrite e
+  shrink a = []
+
 annReplace v eff = do
   (eff', sub) <- runStateT (foldEffectM alg eff) Nothing
   return $ case sub of
@@ -65,12 +76,15 @@ annReplace v eff = do
     Just sub' -> Just (eff',sub')
   where
     mRepAnn ann = do
+      curr <- get
       mRep <- lift $ AT.randomReplace v ann
-      case mRep of
-        Nothing -> return Nothing
-        Just (ann', s) -> do
+      case (curr,mRep) of
+        (Just _,_) -> return Nothing
+        (_,Nothing) -> return Nothing
+        (_,Just (ann', s)) -> do
           put $ Just s
           return $ Just ann'
+
     repLbl _ l ann = do
       mRep <- mRepAnn ann
       case mRep of
@@ -110,3 +124,24 @@ betaEq a = do
     Nothing -> return a
   where
     var = 1 + (maximum $ 0 : (D.toList $ D.map fst $ vars a))
+
+randomRewrite :: Effect -> Gen Effect
+randomRewrite e = foldEffectM alg e
+  where
+    pAlg = (baseProbUnionAlg :: Algebra Identity Effect (M.Map Int Int)){
+      fappAnn = \i m _ -> return $ M.insert i 1 $ M.map (+1) m,
+      fflow = \i _ _ -> return $ M.fromList [(i,1)]
+      }
+    probs = runIdentity $ foldEffectM pAlg e
+    mutate i e = do
+      let p = fromJust $ M.lookup i probs
+      (unionEq p e
+       >>= maybeRuleProb (0,p) betaEq
+       >>= maybeRuleProb (0,p) annBetaEq)
+      
+    alg = (mapASTUnionAlg mutate){
+      fappAnn = \i a1 a2 -> mutate i $ AppAnn a1 a2,
+      fflow = \i l eff -> mutate i $ Flow l eff
+      }
+
+normalizeEquivalent (Equiv a b) = normalize a == normalize b
