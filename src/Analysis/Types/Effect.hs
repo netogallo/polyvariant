@@ -225,6 +225,7 @@ application a1 a2 = App a1 a2
 reduce' = runIdentity . foldEffectM alg
   where
     alg = algebra{
+      fflow = \_ l ann -> return $ Flow l $ C.unions $ A.reduce ann,
       fapp = \_ e1 e2 -> let
          r = application e1 e2
          in
@@ -232,9 +233,10 @@ reduce' = runIdentity . foldEffectM alg
           -- trace ("App: " ++ show (e1,e2,r)) $ return $ application e1 e2,
       fappAnn = \_ e1 ann -> let
         r = annApplication e1 ann
-        in
-         return r
-         -- trace ("AApp: " ++ show (e1,ann,r)) $ return $ annApplication e1 ann
+        in return $ case r of
+          AppAnn eff ann' -> AppAnn eff $ A.reduce ann'
+          _ -> r
+               -- trace ("AApp: " ++ show (e1,ann,r)) $ return $ annApplication e1 ann
       }
 
 reduce e = go e

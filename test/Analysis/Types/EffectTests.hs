@@ -125,6 +125,12 @@ betaEq a = do
   where
     var = 1 + (maximum $ 0 : (D.toList $ D.map fst $ vars a))
 
+annRewrite e =
+  case e of
+    Flow l ann -> Flow l <$> AT.randomRewrite ann
+    AppAnn eff ann -> AppAnn eff <$> AT.randomRewrite ann
+    _ -> return e
+
 randomRewrite :: Effect -> Gen Effect
 randomRewrite e = foldEffectM alg e
   where
@@ -136,6 +142,7 @@ randomRewrite e = foldEffectM alg e
     mutate i e = do
       let p = fromJust $ M.lookup i probs
       (unionEq p e
+       >>= maybeRuleProb (0,p) annRewrite
        >>= maybeRuleProb (0,p) betaEq
        >>= maybeRuleProb (0,p) annBetaEq)
       
