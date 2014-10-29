@@ -78,10 +78,6 @@ baseGApp _ a b = return $ a <+> b
 
 bound (_,b) = b == Bound
 
-renameAbs = undefined
-rename1 = undefined
-rename2 = undefined
-
 subVar vcons rep i v = do
   let rep' = fromJust $ M.lookup i rep
   (n,freeVars) <- get

@@ -8,6 +8,7 @@ import Control.Monad.Identity
 import qualified Data.Map as M
 import qualified Analysis.Types.Common as C
 import Data.Maybe
+import Control.Applicative
 
 data Type =
   TBool
@@ -39,10 +40,13 @@ instance C.Fold Type Algebra where
         ftbool = \i' -> putElem i' TBool
         }
 
-
-
 instance C.WithAbstraction Type Algebra where
     lambdaDepths = depths
+    abst (Forall v t) = Just (v,t)
+    abst _ = Nothing
+    abstC = Forall
+    baseAbstAlgebra alg abst = alg{fforall=abst}
+    groupAbstAlgebra alg abst = alg{fforall=abst}
 
 data Algebra m t a =
   Algebra{
@@ -87,23 +91,27 @@ depths = runIdentity . (C.foldM alg)
       ftbool = \_ -> return M.empty
       }
 
-renameByLambdasOffset base offset obj = lift calcReplacements >>= mkReplacements
+renameByLambdasOffset base'' offset obj = lift calcReplacements >>= mkReplacements
   where
-    repAlg = Algebra{
-      farr = \i a1 _ a2 -> C.rename2 base i a1 a2,
-      fann = \i a1 _ -> C.rename1 base i a1,
-      fforall = C.renameAbs base offset obj,
-      ftbool = const (return M.empty)
+    base = C.mkRepBase base''
+    repAlg = (C.baseRepAbstAlg base'' offset obj :: Monad m => Algebra m Type (M.Map Int (M.Map Int (Int,Bool)))){
+      farr = \i a1 _ a2 -> return $ M.insert i base $ M.union a1 a2,
+      fann = \i a1 _ -> return $ M.insert i base a1,
+      ftbool = \i -> return $ M.fromList [(i,base)]
       }
-    calcReplacements = C.foldM repAlg obj
+    calcReplacements = M.map (M.map fst) <$> C.foldM repAlg obj
     arr rep i t1 eff t2 = do
       let offset' = fromJust $ M.lookup i $ C.lambdaDepths (obj :: Type)
           base' = fromJust $ M.lookup i rep
       eff' <- E.renameByLambdasOffset base' offset' eff
       return $ Arr t1 eff' t2
-    subAlg rep = algebra{
+    ann rep i t ann =
+      let offset' = fromJust $ M.lookup i $ C.lambdaDepths (obj :: Type)
+          base' = fromJust $ M.lookup i rep
+      in Ann t <$> A.renameByLambdasOffset base' offset' ann
+    subAlg rep = (C.baseSubAbstAlg rep){
       farr = arr rep,
-      fann = A.subAppAnn Ann obj rep
+      fann = ann rep
       }
     mkReplacements rep = C.foldM (subAlg rep) obj
 
