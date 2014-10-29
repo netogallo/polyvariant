@@ -52,7 +52,7 @@ unionEq p =
   maybeRuleProb (0,p) identEq M.>=>
   maybeRuleProb (0,p) emptyEq
 
-randomReplaceAlg :: (WithSets a alg, Ord a) => Int -> alg (StateT (Maybe a) Gen) a a
+randomReplaceAlg :: (LambdaCalculus a alg, WithSets a alg, Ord a) => Int -> alg (StateT (Maybe a) Gen) a a
 randomReplaceAlg v = alg
   where
     ifReplaced yes no = do
@@ -73,13 +73,13 @@ randomReplaceAlg v = alg
       ifReplaced (return $ c a1 a2) (maybeReplace (c a1 a2))
     repAbst _ v ann =
       ifReplaced (return $ abstC v ann) (maybeReplace (abstC v ann))
-    alg = unionAlgebra (baseAlgebra baseVar repAbst (repDual appC)) (repDual unionC) (const $ return emptyC)
+    alg = unionAlgebra (mkCalcAlgebra baseVar repAbst (repDual appC)) (repDual unionC) (const $ return emptyC)
 
 -- betaEq a = do
 --   mRep <- runStateT $ foldM (randomReplaceAlg a) Nothing
 --   return ()
 
-mapASTAlg f = baseAlgebra varF abstF appF
+mapASTAlg f = mkCalcAlgebra varF abstF appF
   where
     varF i v = f i $ varC v
     abstF i v e = f i $ abstC v e
@@ -91,7 +91,7 @@ mapASTUnionAlg f = unionAlgebra (mapASTAlg f) unionF emptyF
     emptyF i = f i $ emptyC
 
 baseProbAlg :: (Monad m, LambdaCalculus a alg) => alg m a (Ma.Map Int Int)
-baseProbAlg = groupAlgebra varF abstF appF
+baseProbAlg = mkGroupCalcAlgebra varF abstF appF
   where
     varF i _ = return $ Ma.fromList [(i,1)]
     abstF i _ m = return $ Ma.insert i 1 $ Ma.map (+1) m

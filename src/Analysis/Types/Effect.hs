@@ -25,35 +25,40 @@ data Effect =
 instance C.Fold Effect Algebra where
   foldM = foldEffectM
   byId = undefined
+  baseAlgebra = algebra
+  groupAlgebra =
+    Algebra {
+      fvar = \_ _ -> return C.void,
+      fapp = \_ s1 s2 -> return $ s1 C.<+> s2,
+      fappAnn = \_ a _ -> return a,
+      fabs = \_ _ s -> return s,
+      funion = \_ a b -> return $ a C.<+> b,
+      fflow = \_ _ _ -> return C.void,
+      fempty = \_ -> return C.void
+      }
+
+instance C.WithAbstraction Effect Algebra where
+  abst (Abs v e) = Just (v,e)
+  abst _ = Nothing
+  abstC = Abs
+  increment = increment
+  vars = vars
+  lambdaDepths = depths
+  baseAbstAlgebra alg abst = alg{fabs=abst}
+  groupAbstAlgebra alg abst = alg{fabs=abst}
 
 instance C.LambdaCalculus Effect Algebra where
-  lambdaDepths = depths
   app (App a1 a2) = Just (a1,a2)
   app _ = Nothing
   appC = App
   var (Var i) = Just i
   var _ = Nothing
   varC = Var
-  abst (Abs v e) = Just (v,e)
-  abst _ = Nothing
-  abstC = Abs
-  increment = increment
-  baseAlgebra var abst app = algebra{
+  baseCalcAlgebra alg var app = alg{
     fvar = var,
-    fabs = abst,
     fapp = app
     }
-  groupAlgebra var abst app =
-    Algebra {
-      fvar = var,
-      fapp = app,
-      fappAnn = \_ a _ -> return a,
-      fabs = abst,
-      funion = \_ a b -> return $ a C.<+> b,
-      fflow = \_ _ _ -> return C.void,
-      fempty = \_ -> return C.void
-      }
-  vars = vars
+  groupCalcAlgebra alg var app = alg{fvar=var,fapp=app}
 
 instance C.WithSets Effect Algebra where
   unionM (Union a b) = Just (a,b)

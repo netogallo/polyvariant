@@ -18,6 +18,14 @@ data Type =
 
 instance C.Fold Type Algebra where    
   foldM = foldTypeM
+  baseAlgebra = algebra
+  groupAlgebra =
+    Algebra{
+      ftbool = \_ -> return C.void,
+      fforall = \_ _ s -> return s,
+      fann = \_ s _ -> return s,
+      farr = \_ s1 _ s2 -> return $ s1 C.<+> s2
+      }
   byId i e = runIdentity $ execStateT (C.foldM alg e) Nothing
     where
       putElem i' e' = do
@@ -33,8 +41,8 @@ instance C.Fold Type Algebra where
 
 
 
-instance C.LambdaCalculus Type Algebra where
-  lambdaDepths = depths
+instance C.WithAbstraction Type Algebra where
+    lambdaDepths = depths
 
 data Algebra m t a =
   Algebra{

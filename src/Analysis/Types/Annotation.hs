@@ -29,31 +29,37 @@ data Annotation =
 instance C.Fold Annotation Algebra where
   foldM = foldAnnM
   byId = undefined
+  baseAlgebra = algebra
+  groupAlgebra =
+    Algebra{
+      fvar = \_ _ -> return C.void,
+      fabs = \_ _ s -> return s,
+      fapp = \_ s1 s2 -> return $ s1 C.<+> s2,
+      flabel = \_ _ -> return C.void,
+      funion = \_  a b -> return $ a C.<+> b,
+      fempty = const $ return C.void
+    }
+
+instance C.WithAbstraction Annotation Algebra where
+  abst (Abs v e) = Just (v,e)
+  abst _ = Nothing
+  abstC = Abs
+  increment = increment
+  baseAbstAlgebra alg abst = alg{fabs=abst}
+  groupAbstAlgebra alg abst = alg{fabs=abst}
+  vars = vars
+  lambdaDepths = depths
 
 instance C.LambdaCalculus Annotation Algebra where
-  lambdaDepths = depths
   app (App a1 a2) = Just (a1,a2)
   app _ = Nothing
   appC = App
   var (Var i) = Just i
   var _ = Nothing
   varC = Var
-  abst (Abs v e) = Just (v,e)
-  abst _ = Nothing
-  abstC = Abs
-  increment = increment
-  baseAlgebra var abst app =
-    algebra{fvar=var,fabs=abst,fapp=app}
-  groupAlgebra var abst app =
-    Algebra{
-      fvar = var,
-      fabs = abst,
-      fapp = app,
-      flabel = \_ _ -> return C.void,
-      funion = \_  a b -> return $ a C.<+> b,
-      fempty = const $ return C.void
-    }
-  vars = vars
+  baseCalcAlgebra alg var app =
+    alg{fvar=var,fapp=app}
+  groupCalcAlgebra alg var app = alg{fvar=var,fapp=app}
 
 instance C.WithSets Annotation Algebra where
   unionM (Union a1 a2) = Just (a1,a2)
