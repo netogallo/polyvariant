@@ -250,4 +250,4 @@ reduce e = go e
       let e' = reduce' e
       in if e == e' then e else go e'    
 
-normalize = C.unions . renameByLambdas . reduce . renameByLambdas
+normalize = C.unions . reduce . renameByLambdas

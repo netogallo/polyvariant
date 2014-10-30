@@ -1,18 +1,22 @@
 module Analysis.Types.SortsTests where
 
 import Test.QuickCheck
-import Test.QuickCheck.Gen
 import Control.Applicative
 import Analysis.Types.Sorts
+import Control.Applicative()
+
+allSorts = foldl mkSorts [Ann,Eff] [1..]
+  where
+    mkSorts s _ = s ++ concatMap (\x -> map (Arr x) s) s
+
+-- The sorts are enumerated ad-infinitum by the function
+-- above and this decides how much of them are considered
+-- for arbitrary generation
+maxComplexity = 30
 
 instance Arbitrary Sort where
 
-  arbitrary = do
-    s <- elements [1..4]
-    case s of
-      1 -> return Eff
-      2 -> return Ann
-      _ -> Arr <$> arbitrary <*> arbitrary
+  arbitrary = (!!) allSorts <$> choose (0,maxComplexity)
 
   shrink x =
     case x of

@@ -174,7 +174,10 @@ baseAppAlg (abst -> Just (var,a1)) a2 = alg $ lambdaDepths a1
             isShadowed = fromJust $ M.lookup i shadowedVars
         in case d of
           _ | isShadowed -> return $ varC v
-          Just d' | d' > 0 -> return $ increment d' a2'
+          -- One has to be added to the depth because at the
+          -- end of the application, the bound variables in
+          -- the term will be subtracted 1
+          Just d' | d' > 0 -> return $ increment (d' + 1) a2'
           Just _ -> return a2'
           Nothing -> fail "No depth for expression!"
       | otherwise = return $ varC v

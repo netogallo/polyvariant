@@ -16,11 +16,14 @@ import Control.Monad.Identity
 
 data Equiv = Equiv Effect Effect deriving Show
 
-arbitraryWithSort sort' = arbitrary' M.empty sort'
+arbitraryWithSort = arbitraryWithSortAndGamma M.empty
+
+arbitraryWithSortAndGamma gamma' sort' = arbitrary' gamma' sort'
   where
     arbitrary' gamma sort = do
       pEff <- elements [1..20]
       let varRange = [1..3]
+          mkAnnotation = AT.arbitraryWithGammaAndSort gamma S.Ann
           lbl = elements $ map show ([1..100] :: [Int])
           mkApp = do
             e1 <- arbitrary' gamma (S.Arr S.Eff sort)
@@ -28,7 +31,7 @@ arbitraryWithSort sort' = arbitrary' M.empty sort'
             return $ App e1 e2
           mkAppAnn = do
             e1 <- arbitrary' gamma (S.Arr S.Ann sort)
-            e2 <- arbitrary
+            e2 <- mkAnnotation
             return $ AppAnn e1 e2
       var <- case filter (\(_,sort'') -> sort == sort'') $ M.toList gamma of
         [] -> return Nothing
@@ -38,12 +41,12 @@ arbitraryWithSort sort' = arbitrary' M.empty sort'
           v <- elements varRange
           eff <- arbitrary' (M.insert v s1 gamma) s2
           return $ Abs (S.Var v s1) eff
-        S.Eff | pEff < 5 -> Flow <$> lbl <*> arbitrary
+        S.Eff | pEff < 5 -> Flow <$> lbl <*> mkAnnotation
         S.Eff | pEff < 10 -> return Empty
         S.Eff | pEff < 15 -> Union <$> arbitrary' gamma S.Eff <*> arbitrary' gamma S.Eff
         S.Eff | pEff < 18 -> mkApp
         S.Eff -> mkAppAnn
-        S.Ann -> arbitrary
+        S.Ann -> fail "Cannot make Effect of sort Ann"
       alt <- elements [1..3]
       return $ case var of
         Just v | alt > 1 -> Var v

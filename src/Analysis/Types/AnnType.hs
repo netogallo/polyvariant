@@ -116,3 +116,16 @@ renameByLambdasOffset base'' offset obj = lift calcReplacements >>= mkReplacemen
     mkReplacements rep = C.foldM (subAlg rep) obj
 
 renameByLambdas obj = runIdentity $ evalStateT (renameByLambdasOffset M.empty 0 obj) (-1 :: Int,M.empty)
+
+reduce' = runIdentity . foldTypeM alg
+  where
+    arrF _ t1 e t2 = return $ Arr t1 (C.unions $ E.reduce e) t2
+    annF _ t1 ann = return $ Ann t1 $ C.unions $ A.reduce ann
+    alg = algebra{
+      fann = annF,
+      farr = arrF
+      }
+
+reduce e = if reduce' e == e then e else reduce $ reduce' e
+
+normalize = reduce . renameByLambdas

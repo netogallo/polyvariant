@@ -11,29 +11,49 @@ import Control.Monad (foldM, (>=>))
 import qualified Data.Map as M
 import Control.Monad.State
 import qualified Data.Set as D
+import Data.Maybe (isJust,fromJust)
 
 data Equiv = Equiv Annotation Annotation deriving Show
 
-instance Arbitrary Annotation where
-  arbitrary = mkBound <$> arbitrary'
-    where
-      arbitrary' = do
-        s <- elements [1..7]
-        let var = elements $ [1..3]
+arbitraryWithGammaAndSort :: M.Map Int S.Sort -> S.Sort -> Gen Annotation
+arbitraryWithGammaAndSort gamma' sort' = arbitrary' (0 :: Int) gamma' sort'
+   where
+      arbitrary' pUn gamma sort = do
+        p <- choose (0,99) :: Gen Int
+        let varRange = elements $ [1..3]
             lbl = elements $ map show [1..100]
-        case s of
-          1 -> Var <$> var
-          2 -> Union <$> arbitrary' <*> arbitrary'
-          3 -> (\v t -> App (Abs (S.Var v S.Ann) t)) <$> var <*> arbitrary' <*> arbitrary'
-          4 -> (\v -> Abs (S.Var v S.Ann)) <$> var <*> arbitrary'
-          5 -> Label <$> lbl
-          6 -> (\v -> App (Var v)) <$> var <*> arbitrary'
-          _ -> return Empty
-      mkBound expr =
-        let
-          free = D.filter (not . C.bound) $ vars expr
-        in D.fold (\(v,_) s -> Abs (S.Var v S.Ann) s) expr free
+        var <- case filter ((== sort) . snd) $ M.toList gamma of
+          [] -> return Nothing
+          vs -> Just . fst <$> elements vs
           
+        ann' <- case sort of
+          S.Eff -> error "Annotations cannot have effect in the Sort"
+          S.Ann | p `mod` 2 < 1 -> return Empty
+          S.Ann -> Label <$> lbl
+          S.Arr a1 a2 -> do
+            v <- varRange
+            ann <- arbitrary' pUn (M.insert v a1 gamma) a2
+            return $ Abs (S.Var v a1) ann
+            
+        pOver <- choose (0,99) :: Gen Int
+        ann' <- case var of
+          _ | pOver `mod` 10  < 1 -> do
+            ann1 <- arbitrary' pUn gamma (S.Arr S.Ann sort)
+            ann2 <- arbitrary' pUn gamma sort
+            return $ App ann1 ann2
+          Just v | pOver `mod` 3 > 0 -> return $ Var v
+          _ -> return ann'
+          
+        pUn' <- choose (1,pUn + 7)
+        case sort of
+          S.Ann | pUn' < 5 -> do
+            u1 <- arbitrary' (pUn + 1) gamma' sort'
+            u2 <- arbitrary' (pUn + 1) gamma' sort'
+            return $ Union (Union u1 u2) ann'
+          _ -> return ann'
+
+instance Arbitrary Annotation where
+  arbitrary = arbitraryWithGammaAndSort M.empty S.Ann
   shrink x =
     case x of
       Empty -> []
