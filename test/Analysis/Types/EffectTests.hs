@@ -16,9 +16,9 @@ import Control.Monad.Identity
 
 data Equiv = Equiv Effect Effect deriving Show
 
-arbitraryWithSort = arbitraryWithSortAndGamma M.empty
+arbitraryWithSort = arbitraryWithGammaAndSort M.empty
 
-arbitraryWithSortAndGamma gamma' sort' = arbitrary' gamma' sort'
+arbitraryWithGammaAndSort gamma' sort' = arbitrary' gamma' sort'
   where
     arbitrary' gamma sort = do
       pEff <- elements [1..20]
