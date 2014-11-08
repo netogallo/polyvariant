@@ -91,7 +91,7 @@ depths = runIdentity . (C.foldM alg)
       ftbool = \_ -> return M.empty
       }
 
-renameByLambdasOffset base'' offset obj = lift calcReplacements >>= mkReplacements
+renameByLambdasOffset base'' offset obj = calcReplacements >>= mkReplacements
   where
     base = C.mkRepBase base''
     repAlg = (C.baseRepAbstAlg base'' offset obj :: Monad m => Algebra m Type (M.Map Int (M.Map Int (Int,Bool)))){
@@ -115,7 +115,7 @@ renameByLambdasOffset base'' offset obj = lift calcReplacements >>= mkReplacemen
       }
     mkReplacements rep = C.foldM (subAlg rep) obj
 
-renameByLambdas obj = runIdentity $ evalStateT (renameByLambdasOffset M.empty 0 obj) (-1 :: Int,M.empty)
+renameByLambdas obj = runIdentity $ renameByLambdasOffset M.empty 0 obj
 
 reduce' = runIdentity . foldTypeM alg
   where

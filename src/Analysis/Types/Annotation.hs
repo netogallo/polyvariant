@@ -145,14 +145,14 @@ vars = runIdentity . C.foldM alg
 --    alg :: Monad m => Algebra (StateT (D.Set (Int,C.Boundness)) m) Annotation (D.Set (Int,C.Boundness))
     alg = C.baseVarsAlg
 
-renameByLambdasOffset base offset obj = lift calcReplacements >>= mkReplacements
+renameByLambdasOffset base offset obj = calcReplacements >>= mkReplacements
   where
     calcReplacements =
       M.map (M.map fst) <$> foldAnnM (C.baseRepAlg base offset obj :: Algebra Identity Annotation (M.Map Int (M.Map Int (Int,Bool)))) obj
     mkReplacements rep = foldAnnM (C.baseSubAlg rep) obj
 
 renameByLambdas :: Annotation -> Annotation
-renameByLambdas obj = runIdentity $ evalStateT (renameByLambdasOffset M.empty 0 obj) (-1 :: Int,M.empty)
+renameByLambdas obj = runIdentity $ renameByLambdasOffset M.empty 0 obj
 
 subAppAnn cons obj rep i s ann = do
   let offset' = fromJust $ M.lookup i $ C.lambdaDepths obj
@@ -185,7 +185,7 @@ increment = incrementWithBase D.empty
 application fun@(Abs _ a1) a2 = increment (-1) $ runIdentity $ C.foldM (C.baseAppAlg fun a2) a1
 application a1 a2 = App a1 a2
 
-reduce' = runIdentity . (foldAnnM alg)
+reduce' = runIdentity . (foldAnnM alg >=> foldAnnM C.baseRedUnionAlg)
   where
     alg = algebra{
       fapp = \i a1 a2 -> return $ application a1 a2

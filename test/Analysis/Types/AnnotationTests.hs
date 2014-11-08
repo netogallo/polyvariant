@@ -45,12 +45,11 @@ arbitraryWithGammaAndSort gamma' sort' = arbitrary' (0 :: Int) gamma' sort'
           _ -> return ann'
           
         pUn' <- choose (1,pUn + 7)
-        case sort of
-          S.Ann | pUn' < 5 -> do
-            u1 <- arbitrary' (pUn + 1) gamma' sort'
-            u2 <- arbitrary' (pUn + 1) gamma' sort'
-            return $ Union (Union u1 u2) ann'
-          _ -> return ann'
+        let mkUnion = do
+              u1 <- arbitrary' (pUn + 1) gamma' sort
+              u2 <- arbitrary' (pUn + 1) gamma' sort
+              return $ Union (Union u1 u2) ann'
+        if pUn' < 5 then mkUnion else return ann'
 
 instance Arbitrary Annotation where
   arbitrary = arbitraryWithGammaAndSort M.empty S.Ann

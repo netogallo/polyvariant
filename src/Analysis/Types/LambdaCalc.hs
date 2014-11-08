@@ -14,7 +14,7 @@ data LambdaCalc t =
   | App String (LambdaCalc t) (LambdaCalc t)
   deriving (Show,Read,Eq,Ord)
 
-data Algebra t m a =
+data Algebra t m t' a =
   Algebra{
     fvar :: Int -> Int -> m a,
     fvfalse :: Int -> String -> m a,
@@ -24,7 +24,7 @@ data Algebra t m a =
     fapp :: Int -> String -> a -> a -> m a
     }
 
-algebra :: Monad m => Algebra t m (LambdaCalc t)
+algebra :: Monad m => Algebra t m (LambdaCalc t) (LambdaCalc t)
 algebra = Algebra{
   fvar = \_ v -> return $ Var v,
   fvfalse = \_ l -> return $ VFalse l,
@@ -34,20 +34,43 @@ algebra = Algebra{
   fapp = \_ l t1 t2 -> return $ App l t1 t2
   }
 
-instance C.LambdaCalculus (LambdaCalc t) (Algebra t) where
-  lambdaDepths = depths
+instance C.Fold (LambdaCalc t) (Algebra t) where
   byId = undefined
   foldM = foldLambdaCalcM
-  app (App _ a1 a2) = Just (a1,a2)
-  app _ = Nothing
-  appC = undefined
-  var (Var i) = Just i
-  var _ = Nothing
-  varC = Var
-  abst (Abs _ v e) = undefined -- Just (v,e)
-  abstC = undefined
-  increment = undefined
-  baseAlgebra = undefined
+  baseAlgebra = algebra
+  groupAlgebra =
+    Algebra{
+      fvar = \_ _ -> return C.void,
+      fvfalse = \_ _ -> return C.void,
+      fvtrue = \_ _ -> return C.void,
+      fabs = \_ _ _ s -> return s,
+      fif = \_ _ cond yes no -> return $ cond C.<+> yes C.<+> no,
+      fapp = \_ _ s1 s2 -> return $ s1 C.<+> s2
+      }
+
+groupAlgebraInit s0 =
+    Algebra{
+      fvar = \_ _ -> return s0,
+      fvfalse = \_ _ -> return s0,
+      fvtrue = \_ _ -> return s0,
+      fabs = \_ _ _ s -> return s,
+      fif = \_ _ cond yes no -> return $ cond C.<+> yes C.<+> no,
+      fapp = \_ _ s1 s2 -> return $ s1 C.<+> s2
+      }
+
+
+-- instance C.LambdaCalculus (LambdaCalc t) (Algebra t) where
+--   lambdaDepths = depths
+--   app (App _ a1 a2) = Just (a1,a2)
+--   app _ = Nothing
+--   appC = undefined
+--   var (Var i) = Just i
+--   var _ = Nothing
+--   varC = Var
+--   abst (Abs _ v e) = undefined -- Just (v,e)
+--   abstC = undefined
+--   increment = undefined
+--   baseAlgebra = undefined
 
 
 foldLambdaCalcM Algebra{..} expr = evalStateT (foldLambdaCalcM' undefined expr) 0

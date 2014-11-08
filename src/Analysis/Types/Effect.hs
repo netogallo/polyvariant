@@ -143,7 +143,7 @@ depths = runIdentity . (foldEffectM alg)
     un i ma mb = return $ M.insert i 0 $ M.union ma mb
 
 
-renameByLambdasOffset base' offset obj = lift calcReplacements >>= mkReplacements
+renameByLambdasOffset base' offset obj = calcReplacements >>= mkReplacements
   where
     base = M.map (\e -> (e,True)) base'
     d = depths obj
@@ -159,27 +159,7 @@ renameByLambdasOffset base' offset obj = lift calcReplacements >>= mkReplacement
       }
     mkReplacements rep = foldEffectM (subAlg rep) obj
 
-
--- renameByLambdasOffset base offset obj = lift calcReplacements >>= mkReplacements
---   where
---     calcReplacements = foldEffectM repAlg obj
---     repAlg = Algebra{
---       fvar = C.discard $ C.rename base,
---       fapp = C.rename2 base,
---       fappAnn = \i s _ -> C.rename1 base i s,
---       fabs = C.renameAbs base offset obj,
---       funion = C.rename2 base,
---       fflow = C.discard $ C.discard $ C.rename base,
---       fempty = const (return M.empty)
---       }
---     subAlg rep =  algebra{
---       fvar = C.subVar Var rep,
---       fabs = C.subAbs Abs rep,
---       fappAnn = A.subAppAnn AppAnn obj rep
---       }
---     mkReplacements rep = foldEffectM (subAlg rep) obj
-
-renameByLambdas obj = runIdentity $ evalStateT (renameByLambdasOffset M.empty 0 obj) (-1 :: Int, M.empty)
+renameByLambdas obj = runIdentity $ renameByLambdasOffset M.empty 0 obj
 
 vars :: Effect -> D.Set (Int,C.Boundness)
 vars = runIdentity . C.foldM alg
@@ -227,8 +207,9 @@ annApplication a1 a2 = AppAnn a1 a2
 application fun@(Abs _ a1) a2 = increment (-1) $ runIdentity $ C.foldM (C.baseAppAlg fun a2) a1
 application a1 a2 = App a1 a2
 
-reduce' = runIdentity . foldEffectM alg
+reduce' = runIdentity . (foldEffectM alg >=> foldEffectM uAlg)
   where
+    uAlg = C.baseRedUnionAlg
     alg = algebra{
       fflow = \_ l ann -> return $ Flow l $ C.unions $ A.reduce ann,
       fapp = \_ e1 e2 -> let

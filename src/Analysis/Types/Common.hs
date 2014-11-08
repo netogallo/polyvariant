@@ -1,4 +1,4 @@
-{-# Language MultiParamTypeClasses, FunctionalDependencies, ViewPatterns #-}
+{-# Language MultiParamTypeClasses, FunctionalDependencies, ViewPatterns, TypeFamilies #-}
 module Analysis.Types.Common where
 import qualified Data.Map as M
 import qualified Analysis.Types.Sorts as S
@@ -10,7 +10,7 @@ import Control.Monad.Identity (runIdentity)
 data Boundness = Bound | Free deriving (Show,Eq,Enum,Ord)
 
 data Variable t =
-  Var {name :: String, set :: t}
+  Var {name :: Int, set :: t}
   deriving (Eq, Read, Show, Ord)
 
 class Group a where
@@ -66,6 +66,8 @@ baseVar _ i = return $ varC i
 baseAbst _ v a = return $ abstC v a
 
 baseApp _ a1 a2 = return $ appC a1 a2
+
+baseEmpty _ = return emptyC
 
 defGroupAlgebra :: (Monad m, Group x, LambdaCalculus a alg) => alg m a x
 defGroupAlgebra = groupCalcAlgebra (groupAbstAlgebra groupAlgebra baseGAbst) baseGVar baseGApp
@@ -130,17 +132,15 @@ baseSubAbstAlg rep = baseAbstAlgebra baseAlgebra abstF
     getVar i v = mkGetVar rep i v
     abstF i var e = return $ abstC var{S.name=fromJust $ getVar i (S.name var)} e
 
+baseSubAlg :: (LambdaCalculus a alg, Monad m) => M.Map Int (M.Map Int Int) -> alg m a a
 baseSubAlg rep = baseCalcAlgebra (baseSubAbstAlg rep) varF appF
   where
     getVar i v = mkGetVar rep i v
-    varF i v = do
-      (fresh,free) <- get
-      case (getVar i v,M.lookup v free) of
-        (Nothing,Nothing) -> do
-          put (fresh + 1,M.insert v fresh free)
-          return $ varC fresh
-        (Nothing,Just i') -> return $ varC i'
-        (Just i',_) -> return $ varC i'
+    varF i v = 
+      return $ case (getVar i v) of
+        Nothing | v < 0 -> varC v
+        Just i' -> varC i'
+        _ -> error $ "Free variables must have a negative identifier, found: " ++ show i
     appF _ a1 a2 = return $ appC a1 a2
 
 baseUnionRepAlg base' offset e = groupUnionAlgebra (baseRepAlg base' offset e) unionF emptyF
@@ -207,6 +207,15 @@ baseVarsAlg = mkGroupCalcAlgebra var abst app
       return $ D.insert (S.name v, Bound) . D.map bounder $ s
     app _ a1 a2 = return $ D.union a1 a2
 
+
+baseRedUnionAlg :: (LambdaCalculus a alg, Monad m, Ord a, WithSets a alg) => alg m a a
+baseRedUnionAlg = unionAlgebra defAlgebra appF baseEmpty
+  where
+    appF _ a1 a2 =
+      return $ case (a1,a2) of
+        (unionM -> Just (a11,a12),_) -> unionC (appC a11 a2) (appC a12 a2)
+        (abst -> Just (v1,f1),abst -> Just (v2,f2)) | v1 == v2 -> abstC v1 $ unionC f1 f2
+        _ -> appC a1 a2
 
 unions :: (Fold a alg, WithSets a alg, Ord a) => a -> a
 unions = runIdentity . foldM alg
