@@ -7,31 +7,31 @@ import Control.Monad.Identity
 
 data LambdaCalc t =
   Var Int
-  | VFalse String
-  | VTrue String
-  | Abs String (C.Variable t) (LambdaCalc t)
-  | If String (LambdaCalc t) (LambdaCalc t) (LambdaCalc t)
-  | App String (LambdaCalc t) (LambdaCalc t)
+  | VFalse
+  | VTrue
+  | Abs (C.Variable t) (LambdaCalc t)
+  | If (LambdaCalc t) (LambdaCalc t) (LambdaCalc t)
+  | App (LambdaCalc t) (LambdaCalc t)
   deriving (Show,Read,Eq,Ord)
 
 data Algebra t m t' a =
   Algebra{
     fvar :: Int -> Int -> m a,
-    fvfalse :: Int -> String -> m a,
-    fvtrue :: Int -> String -> m a,
-    fabs :: Int -> String -> (C.Variable t) -> a -> m a,
-    fif :: Int -> String -> a -> a -> a -> m a,
-    fapp :: Int -> String -> a -> a -> m a
+    fvfalse :: Int -> m a,
+    fvtrue :: Int -> m a,
+    fabs :: Int -> (C.Variable t) -> a -> m a,
+    fif :: Int -> a -> a -> a -> m a,
+    fapp :: Int -> a -> a -> m a
     }
 
 algebra :: Monad m => Algebra t m (LambdaCalc t) (LambdaCalc t)
 algebra = Algebra{
   fvar = \_ v -> return $ Var v,
-  fvfalse = \_ l -> return $ VFalse l,
-  fvtrue = \_ l -> return $ VTrue l,
-  fabs = \_ l var s -> return $ Abs l var s,
-  fif = \_ l cond yes no -> return $ If l cond yes no,
-  fapp = \_ l t1 t2 -> return $ App l t1 t2
+  fvfalse = \_ -> return $ VFalse,
+  fvtrue = \_ -> return $ VTrue,
+  fabs = \_ var s -> return $ Abs var s,
+  fif = \_ cond yes no -> return $ If cond yes no,
+  fapp = \_ t1 t2 -> return $ App t1 t2
   }
 
 instance C.Fold (LambdaCalc t) (Algebra t) where
@@ -40,22 +40,22 @@ instance C.Fold (LambdaCalc t) (Algebra t) where
   baseAlgebra = algebra
   groupAlgebra =
     Algebra{
-      fvar = \_ _ -> return C.void,
-      fvfalse = \_ _ -> return C.void,
-      fvtrue = \_ _ -> return C.void,
-      fabs = \_ _ _ s -> return s,
-      fif = \_ _ cond yes no -> return $ cond C.<+> yes C.<+> no,
-      fapp = \_ _ s1 s2 -> return $ s1 C.<+> s2
+      fvar = \_ _-> return C.void,
+      fvfalse = \_ -> return C.void,
+      fvtrue = \_ -> return C.void,
+      fabs = \_ _ s -> return s,
+      fif = \_ cond yes no -> return $ cond C.<+> yes C.<+> no,
+      fapp = \_ s1 s2 -> return $ s1 C.<+> s2
       }
 
 groupAlgebraInit s0 =
     Algebra{
       fvar = \_ _ -> return s0,
-      fvfalse = \_ _ -> return s0,
-      fvtrue = \_ _ -> return s0,
-      fabs = \_ _ _ s -> return s,
-      fif = \_ _ cond yes no -> return $ cond C.<+> yes C.<+> no,
-      fapp = \_ _ s1 s2 -> return $ s1 C.<+> s2
+      fvfalse = \_ -> return s0,
+      fvtrue = \_ -> return s0,
+      fabs = \_ _ s -> return s,
+      fif = \_ cond yes no -> return $ cond C.<+> yes C.<+> no,
+      fapp = \_ s1 s2 -> return $ s1 C.<+> s2
       }
 
 
@@ -80,28 +80,28 @@ foldLambdaCalcM Algebra{..} expr = evalStateT (foldLambdaCalcM' undefined expr) 
       put (i + 1)
       case l of
         Var v -> lift $ fvar i v
-        VFalse lbl -> lift $ fvfalse i lbl
-        VTrue lbl -> lift $ fvtrue i lbl
-        Abs lbl var exp -> foldLambdaCalcM' s exp >>= lift . (fabs i lbl var)
-        If lbl cond yes no -> do
+        VFalse -> lift $ fvfalse i
+        VTrue -> lift $ fvtrue i
+        Abs var exp -> foldLambdaCalcM' s exp >>= lift . (fabs i var)
+        If cond yes no -> do
           cond' <- foldLambdaCalcM' s cond
           yes' <- foldLambdaCalcM' s yes
           no' <- foldLambdaCalcM' s no
-          lift $ fif i lbl cond' yes' no'
-        App lbl exp1 exp2 -> do
+          lift $ fif i cond' yes' no'
+        App exp1 exp2 -> do
           exp1' <- foldLambdaCalcM' s exp1
           exp2' <- foldLambdaCalcM' s exp2
-          lift $ fapp i lbl exp1' exp2'
+          lift $ fapp i exp1' exp2'
 
 depths = runIdentity . (foldLambdaCalcM alg)
   where
-    sing i _ = return $ M.fromList [(i,0 :: Int)]
+    sing i = return $ M.fromList [(i,0 :: Int)]
     alg = Algebra{
-      fvar = sing,
+      fvar = \i _ -> sing i,
       fvfalse = sing,
       fvtrue = sing,
-      fabs = \i _ _ d -> return $ M.insert i 0 $ M.map (+1) d,
-      fif = \i _ d1 d2 d3 -> return $ M.insert i 0 $ M.unions [d1,d2,d3],
-      fapp = \i _ d1 d2 -> return $ M.insert i 0 $ M.union d1 d2
+      fabs = \i _ d -> return $ M.insert i 0 $ M.map (+1) d,
+      fif = \i d1 d2 d3 -> return $ M.insert i 0 $ M.unions [d1,d2,d3],
+      fapp = \i d1 d2 -> return $ M.insert i 0 $ M.union d1 d2
       }
 

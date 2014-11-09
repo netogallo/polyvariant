@@ -13,41 +13,55 @@ import Control.Applicative()
 
 data FreshVar = B0 | B1 | D0 deriving (Show,Eq,Ord)
 
+data SortConstraint =
+  AnyEffect
+  | AnyAnnotation
+  | ASort S.Sort
+  deriving (Show,Eq)
+                                                  
+
+isAnnConstraint c =
+  case c of
+    AnyAnnotation -> True
+    ASort s -> S.annSort s
+
 -- Constraints are represented as pairs. The first
 -- element is the  Annotation/Effect that must be
 -- included in the annotation variable
-type Constraint = (Either A.Annotation E.Effect, S.FlowVariable)
+type Constraint = (Either A.Annotation E.Effect, Int)
 
 data RContext = RContext{
-  _freshIx :: Int
-  }
+  _freshIx :: Int,
+  _fvGammas:: M.Map Int SortConstraint
+ }
 
 makeLenses ''RContext
 
 data RState = RState{
   _freshFlowVars :: M.Map Int (M.Map FreshVar Int),
   _completions :: M.Map Int (AT.Type, [S.FlowVariable]),
-  _gammas :: M.Map Int (M.Map Int (AT.Type, Int)),
-  _fvGammas:: M.Map Int (Maybe S.Sort)
+  _gammas :: M.Map Int (M.Map Int (AT.Type, Int))
 }
 
 makeLenses ''RState
 
 instance CT.Group RState where
-  void = RState M.empty M.empty M.empty M.empty
+  void = RState M.empty M.empty M.empty
   sa <+> sb =
     RState{
       _completions = M.union (sa ^.completions) (sb ^.completions),
       _freshFlowVars = M.union (sa ^.freshFlowVars) (sb ^. freshFlowVars),
-      _gammas = M.union (sa ^. gammas) (sb ^. gammas),
-      _fvGammas = M.union (sa ^. fvGammas) (sb ^. fvGammas)
+      _gammas = M.union (sa ^. gammas) (sb ^. gammas)
       }
 
-getFreshIx :: (Functor m, Monad m) => StateT RContext m Int
-getFreshIx = do
+getFreshIx :: (Functor m, Monad m) => SortConstraint -> StateT RContext m Int
+getFreshIx sort = do
   i <- (^.freshIx) <$> get
   modify (freshIx -~ (1))
+  modify (fvGammas %~ M.insert i sort)
   return i
+
+updateSort var sort = modify (fvGammas %~ M.insert var sort)
 
 -- fresh ix s = do
 --   v <- getFreshIx

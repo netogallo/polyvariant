@@ -209,8 +209,9 @@ baseVarsAlg = mkGroupCalcAlgebra var abst app
 
 
 baseRedUnionAlg :: (LambdaCalculus a alg, Monad m, Ord a, WithSets a alg) => alg m a a
-baseRedUnionAlg = unionAlgebra defAlgebra appF baseEmpty
+baseRedUnionAlg = unionAlgebra defAlgebra appF' baseEmpty
   where
+    appF' _ a1 a2 = return $ appC a1 a2
     appF _ a1 a2 =
       return $ case (a1,a2) of
         (unionM -> Just (a11,a12),_) -> unionC (appC a11 a2) (appC a12 a2)

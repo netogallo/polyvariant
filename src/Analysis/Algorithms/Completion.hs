@@ -18,8 +18,8 @@ completion' cont T.TBool _ = cont (A.TBool, [], [])
 completion' cont (T.Arr t1 t2) c0 = completion' cont' t1 [] >>= cont
   where
     cont'' b1 (tau1,c1,freshVars1) (tau2,c2,freshVars2) = do
-      b0 <- getFreshIx
-      d0 <- getFreshIx
+      b0 <- getFreshIx AnyAnnotation
+      d0 <- getFreshIx AnyEffect
       let
         ffvs = map S.name $ c0 ++ [b1] ++ c1
         eff = foldl E.App (E.Var d0) $ map E.Var ffvs
@@ -37,14 +37,18 @@ completion' cont (T.Arr t1 t2) c0 = completion' cont' t1 [] >>= cont
           let
             ss = map S.sort bi' ++ [S.Ann] ++ map S.sort bj' ++ [S.Ann]
           in foldr1 S.Arr ss
+      updateSort d0 $ ASort sd0
+      updateSort b0 $ ASort sb0
       return (tau, [S.Var d0 sd0, S.Var b0 sb0] ++ c2, (d0,sd0):(b0,sb0):freshVars1 ++ freshVars2)
     
     cont' (tau1, c1, freshVars) = do
-      b1 <- flip S.Var S.Ann <$> getFreshIx
+      b1 <- flip S.Var S.Ann <$> getFreshIx (ASort S.Ann)
       completion' (cont'' b1 (tau1,c1, (S.name b1,S.Ann) : freshVars)) t2 (c0 ++ [b1] ++ c1)
 
 completion :: (Monad m, Functor m) =>
               T.Type
               -> [S.FlowVariable]
               -> StateT RContext m (A.Type, [S.FlowVariable], [(Int,S.Sort)])
-completion = completion' return
+completion ty fv = do
+  (t,ss,freshVars) <- completion' return ty fv
+  return (A.normalize t,ss,freshVars)
