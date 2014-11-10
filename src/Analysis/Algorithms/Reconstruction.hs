@@ -1,3 +1,4 @@
+{-# Language FlexibleContexts #-}
 module Analysis.Algorithms.Reconstruction where
 
 import Analysis.Algorithms.Completion
@@ -53,7 +54,9 @@ calcGammas s0 = C.foldM alg
                             $ s
     alg = (groupAlgebraInit s0){fabs=abs}          
 
-reconstruction s0 = C.foldM alg
+reconstructionF :: (C.Fold a (Algebra T.Type), Functor m, Monad m) =>
+                   RState -> a -> StateT RContext m (At.Type, Int, Int, [(Either An.Annotation E.Effect, Int)])
+reconstructionF s0 = C.foldM alg
   
   where
     alg = Algebra{
@@ -64,7 +67,7 @@ reconstruction s0 = C.foldM alg
     varF i v = do
       let (t,psi) = fromJust $ M.lookup v $ fromJust $ M.lookup i $ s0 ^. gammas
       b0 <- getFreshIx (ASort S.Ann)
-      d0 <- getFreshIx AnyEffect
+      d0 <- getFreshIx $ ASort S.Eff
       return (t,b0,d0,[(Left $ An.Var psi, b0)])
 
     boolF i = do
@@ -82,14 +85,14 @@ reconstruction s0 = C.foldM alg
             s1:s2:_ -> error $ "Inconsistent sorts: " ++ show s1 ++ " and " ++ show s2
       updateSort b1 $ ASort S.Ann
       b0 <- getFreshIx bSort
-      d0 <- getFreshIx AnyEffect
+      d0 <- getFreshIx $ ASort S.Eff
       mapM (\v -> updateSort v bSort) [b2,b3]
       let c0 = [(Right $ E.Var d1,d0),(Right $ E.Flow (show i) $ An.Var b1,d0),
             (Right $ E.Var d2,d0),(Right$ E.Var d3,d0),
             (Left $ An.Var b2,b0),(Left $ An.Var b3,b0)] ++ c1 ++ c2 ++ c3
       return $ (t,b0,b0,c0)
 
-    absF :: (Functor m, Monad m) => Int -> (C.Variable S.Sort) -> (At.Type,Int,Int,[(Either An.Annotation E.Effect,Int)]) -> StateT RContext m (At.Type,Int,Int,[(Either An.Annotation E.Effect,Int)])
+    absF :: (Functor m, Monad m) => Int -> (C.Variable T.Type) -> (At.Type,Int,Int,[(Either An.Annotation E.Effect,Int)]) -> StateT RContext m (At.Type,Int,Int,[(Either An.Annotation E.Effect,Int)])
     absF i var (t2,b2,d0,c1) = do
       let b1 = fromJust . (M.lookup B1) . fromJust . M.lookup i $ s0 ^. freshFlowVars
           (t1,xis) = fromJust . M.lookup i $ s0 ^. completions
@@ -99,10 +102,16 @@ reconstruction s0 = C.foldM alg
       (psi1,phi0) <- solve c1 (D.toList x) b2 d0
       let t' = At.Arr (At.Ann t1 (An.Var b1)) phi0 (At.Ann t2 psi1)
           t = At.Forall (S.Var b1 S.Ann) $ foldr (\v t -> At.Forall v t) t' xis
-      b0 <- getFreshIx AnyAnnotation
-      d0 <- getFreshIx AnyEffect
+      b0 <- getFreshIx $ ASort S.Ann
+      d0 <- getFreshIx $ ASort S.Eff
       return (t,b0,d0,[(Left $ An.Label $ show i,b0)])
       
+reconstruction t = flip evalState rcontext $ do
+  s0 <- lift (initState t)
+  s1 <- calcCompletions s0 t
+  s2 <- calcGammas s1 t
+  undefined -- reconstructionF s2 t
+  
 
 --     abs i l var (t2,b2,d0,c1) = do
 --       b1 <- fromJust . M.lookup (i,B1) . (^.annotations) <$> get

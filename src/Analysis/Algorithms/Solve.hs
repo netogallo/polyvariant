@@ -15,6 +15,25 @@ import Control.Monad.State
 
 import Debug.Trace
 
+emptyG s' = evalState (go s') 1
+  where
+    go s =
+      case s of
+        S.Eff -> return C.emptyC
+        S.Ann -> return C.emptyC
+        S.Arr s1 s2 -> do
+          i <- get
+          modify (+1)
+          C.abstC (S.Var i s1) <$> go s2
+
+emptyTerm :: SortConstraint -> Either A.Annotation E.Effect
+emptyTerm s' =
+  case s' of
+    ASort s | S.annSort s -> Left $ emptyG s
+    ASort s -> Right $ emptyG s
+    AnyAnnotation -> Left C.emptyC
+    AnyEffect -> Right C.emptyC
+
 solveIt :: M.Map Int (D.Set (Either A.Annotation E.Effect, Int)) -> State (D.Set (Either A.Annotation E.Effect, Int), M.Map Int (Either A.Annotation E.Effect)) ()
 solveIt deps = do
   (worklist,analysis) <- get
@@ -58,15 +77,7 @@ solve c x b d = do
         else (v,Right $ E.Var v)
     analysisM v = do
       s' <- (fromJust . M.lookup v) <$> use fvGammas
-      return $ M.fromList $ (:[]) $ case trace ("Analyisi lookup: " ++ show s') s' of
-        ASort s@(S.Arr s1 _) | S.annSort s ->
-          (v,Left $ A.Abs (S.Var v s1) A.Empty)
-        ASort (S.Arr s1 _) ->
-          (v,Right $ E.Abs (S.Var v s1) E.Empty)
-        ASort S.Ann -> (v,Left $ A.Empty)
-        ASort S.Eff -> (v,Right $ E.Empty)
-        AnyAnnotation -> (v,Left $ A.Empty)
-        AnyEffect -> (v,Right $ E.Empty)
+      return $ M.fromList $ (:[]) $ (v,emptyTerm s')
 
     freeVars expr' =
       let vars expr = map fst $ filter (not . C.bound) $ D.toList $ C.vars expr

@@ -35,6 +35,8 @@ data RContext = RContext{
   _fvGammas:: M.Map Int SortConstraint
  }
 
+rcontext = RContext (-1) M.empty
+
 makeLenses ''RContext
 
 data RState = RState{

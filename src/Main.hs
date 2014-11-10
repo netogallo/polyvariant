@@ -1,7 +1,8 @@
 module Main where
-import Analysis.Algorithms.Completion
+import Analysis.Algorithms
 import Analysis.Types.AnnotationTests
 import Analysis.Types.EffectTests
 import Analysis.Types.AnnTypeTests
+import Analysis.Examples
 
 main = return ()
