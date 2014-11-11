@@ -110,7 +110,7 @@ reconstructionF s0 = C.foldM alg
           t = At.Forall (S.Var b1 S.Ann) $ foldr (\v t -> At.Forall v t) t' xis
       b0 <- getFreshIx $ ASort S.Ann
       d0 <- getFreshIx $ ASort S.Eff
-      return (At.normalize t,b0,d0,[(Left $ An.Label $ show i,b0)])
+      return (At.normalize t,b0,d0,[(Left $ An.Label $ show i,b0), (Right $ E.Empty, d0)])
       
 reconstruction t = flip evalState rcontext $ do
   s0 <- lift (initState t)
