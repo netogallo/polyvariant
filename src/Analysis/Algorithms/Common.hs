@@ -45,15 +45,18 @@ data RState = RState{
   _gammas :: M.Map Int (M.Map Int (AT.Type, Int))
 }
 
+instance Show RState where
+  show s = show $ _freshFlowVars s
+
 makeLenses ''RState
 
 instance CT.Group RState where
   void = RState M.empty M.empty M.empty
   sa <+> sb =
     RState{
-      _completions = M.union (sa ^.completions) (sb ^.completions),
-      _freshFlowVars = M.union (sa ^.freshFlowVars) (sb ^. freshFlowVars),
-      _gammas = M.union (sa ^. gammas) (sb ^. gammas)
+      _completions = M.union (_completions sa) (_completions sb),
+      _freshFlowVars = M.unionWith M.union (_freshFlowVars sa) (_freshFlowVars sb),
+      _gammas = M.unionWith M.union (_gammas sa) (_gammas sb)
       }
 
 getFreshIx :: (Functor m, Monad m) => SortConstraint -> StateT RContext m Int

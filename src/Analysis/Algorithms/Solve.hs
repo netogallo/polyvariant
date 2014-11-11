@@ -39,7 +39,7 @@ solveIt deps = do
   (worklist,analysis) <- get
   unless (D.size worklist == 0) $ do
     let (e,x) = D.elemAt 0 worklist
-    let (analysis', isSubset) = case (e,fromJust $ M.lookup x analysis) of
+    let (analysis', isSubset) = case (e,(\(Just x) -> x) $ M.lookup x analysis) of
           (Left a1, Left a2) | A.normalize (A.Union a1 a2) /= A.normalize a2 ->
             (M.insert x (Left $ A.Union a1 a2) analysis, False)
           (Left _, Left _) -> (analysis, True)
@@ -49,7 +49,7 @@ solveIt deps = do
           (a,b) -> error $ "Inconsistent annotations and effect mix: '" ++ show a ++ "' and '" ++ show b ++ "'"
     let worklist' = if isSubset
                     then D.deleteAt 0 worklist
-                    else D.unions [D.deleteAt 0 worklist,fromJust $ M.lookup x deps]
+                    else D.unions [D.deleteAt 0 worklist,fromMaybe D.empty $ M.lookup x deps]
     put (worklist',analysis')
     solveIt deps
 
@@ -64,19 +64,19 @@ solve c x b d = do
               
   let worklist = D.fromList c
       (_,res) = execState (solveIt deps) (worklist,analysis)
-  return $ case (fromJust $ M.lookup b res, fromJust $ M.lookup d res) of
+  return $ case ((\(Just x) -> x) $ M.lookup b res, (\(Just x) -> x) $ M.lookup d res) of
     (Left ann, Right eff) -> (ann,eff)
     err -> error $ "Invalid result for solve: " ++ show err
   
 
   where
     analysisC v = do
-      s' <- (fromJust . M.lookup v) <$> use fvGammas
+      s' <- ((\(Just x) -> x) . M.lookup v) <$> use fvGammas
       return $ M.fromList $ (:[]) $ if isAnnConstraint s'
         then (v,Left $ A.Var v)
         else (v,Right $ E.Var v)
     analysisM v = do
-      s' <- (fromJust . M.lookup v) <$> use fvGammas
+      s' <- ((\(Just x) -> x) . M.lookup v) <$> use fvGammas
       return $ M.fromList $ (:[]) $ (v,emptyTerm s')
 
     freeVars expr' =

@@ -4,6 +4,7 @@ import qualified Analysis.Types.Common as C
 import Control.Monad.State
 import qualified Data.Map as M
 import Control.Monad.Identity
+import Debug.Trace
 
 data LambdaCalc t =
   Var Int

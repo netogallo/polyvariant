@@ -24,7 +24,7 @@ initState :: (Functor m, Monad m) => LambdaCalc T.Type -> m RState
 initState = C.foldM alg
   where
     base i = M.insert i M.empty M.empty
-    baseAll i = RState (base i) M.empty (base i)
+    baseAll i = RState (base i) M.empty M.empty
     sing i = return $ baseAll i
     alg = Algebra{
       fvar = \i _ -> sing i,
@@ -46,13 +46,16 @@ calcCompletions s0 = C.foldM alg
 
 calcGammas s0 = C.foldM alg
   where
+    var i _ = return $ gammas %~ M.insert i M.empty $ s0
     abs i v s = do
       b1 <- getFreshIx (ASort S.Ann)
-      let (t1,_) = fromJust . (M.lookup i) $ s ^. completions
+      let Just (t1,_) = (M.lookup i) $ s ^. completions
       let up = M.map (M.insertWith (const id) (C.name v) (t1,b1))
-      return $ gammas %~ up $ freshFlowVars %~ M.insertWith M.union i (M.fromList [(B1,b1)])
-                            $ s
-    alg = (groupAlgebraInit s0){fabs=abs}          
+      return $ gammas %~ M.insert i M.empty
+             $ gammas %~ up
+             $ freshFlowVars %~ M.insertWith M.union i (M.fromList [(B1,b1)])
+             $ s
+    alg = (groupAlgebraInit s0){fabs=abs,fvar=var}          
 
 reconstructionF :: (C.Fold a (Algebra T.Type), Functor m, Monad m) =>
                    RState -> a -> StateT RContext m (At.Type, Int, Int, [(Either An.Annotation E.Effect, Int)])
@@ -62,17 +65,18 @@ reconstructionF s0 = C.foldM alg
     alg = Algebra{
       fvfalse = boolF,
       fvtrue = boolF,
+      fvar = varF,
       fif = iffF,
       fabs = absF}
     varF i v = do
-      let (t,psi) = fromJust $ M.lookup v $ fromJust $ M.lookup i $ s0 ^. gammas
+      let Just (t,psi) = M.lookup v $ (\(Just x) -> x) $ M.lookup i $ s0 ^. gammas
       b0 <- getFreshIx (ASort S.Ann)
       d0 <- getFreshIx $ ASort S.Eff
       return (t,b0,d0,[(Left $ An.Var psi, b0)])
 
     boolF i = do
-      b0 <- getFreshIx AnyAnnotation
-      d0 <- getFreshIx AnyEffect
+      b0 <- getFreshIx $ ASort S.Ann
+      d0 <- getFreshIx $ ASort S.Eff
       return (At.TBool,b0,d0,[(Left $ An.Label (show i), b0)])
 
     iffF i (_,b1,d1,c1) (t2,b2,d2,c2) (t3,b3,d3,c3) = do
@@ -90,13 +94,13 @@ reconstructionF s0 = C.foldM alg
       let c0 = [(Right $ E.Var d1,d0),(Right $ E.Flow (show i) $ An.Var b1,d0),
             (Right $ E.Var d2,d0),(Right$ E.Var d3,d0),
             (Left $ An.Var b2,b0),(Left $ An.Var b3,b0)] ++ c1 ++ c2 ++ c3
-      return $ (t,b0,b0,c0)
+      return $ (At.normalize t,b0,d0,c0)
 
     absF :: (Functor m, Monad m) => Int -> (C.Variable T.Type) -> (At.Type,Int,Int,[(Either An.Annotation E.Effect,Int)]) -> StateT RContext m (At.Type,Int,Int,[(Either An.Annotation E.Effect,Int)])
     absF i var (t2,b2,d0,c1) = do
-      let b1 = fromJust . (M.lookup B1) . fromJust . M.lookup i $ s0 ^. freshFlowVars
-          (t1,xis) = fromJust . M.lookup i $ s0 ^. completions
-          gamma = fromJust . M.lookup i $ s0 ^. gammas
+      let Just b1 = (M.lookup B1) . (\(Just x) -> x) . M.lookup i $ s0 ^. freshFlowVars
+          (t1,xis) = (\(Just x) -> x) . M.lookup i $ s0 ^. completions
+          gamma = (\(Just x) -> x) . M.lookup i $ s0 ^. gammas
           ffv = map (snd . snd) $ M.toList $ M.delete (C.name var) gamma
           x = D.fromList $ [b1] ++ map S.name xis ++ ffv
       (psi1,phi0) <- solve c1 (D.toList x) b2 d0
@@ -104,18 +108,18 @@ reconstructionF s0 = C.foldM alg
           t = At.Forall (S.Var b1 S.Ann) $ foldr (\v t -> At.Forall v t) t' xis
       b0 <- getFreshIx $ ASort S.Ann
       d0 <- getFreshIx $ ASort S.Eff
-      return (t,b0,d0,[(Left $ An.Label $ show i,b0)])
+      return (At.normalize t,b0,d0,[(Left $ An.Label $ show i,b0)])
       
 reconstruction t = flip evalState rcontext $ do
   s0 <- lift (initState t)
   s1 <- calcCompletions s0 t
   s2 <- calcGammas s1 t
-  undefined -- reconstructionF s2 t
+  reconstructionF s2 t
   
 
 --     abs i l var (t2,b2,d0,c1) = do
 --       b1 <- fromJust . M.lookup (i,B1) . (^.annotations) <$> get
---       (_,comps) <- fromJust . M.lookup i . (^.completions) <$> get
+--       (_,comps) <- (\(Just x) -> x) . M.lookup i . (^.completions) <$> get
 --       let x = D.fromList $ [b1] ++ comps
 --       undefined
 

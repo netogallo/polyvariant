@@ -227,4 +227,3 @@ recombine (Var s) = D.singleton $ Var s
 -- recombine (App (Abs v ann) ann2) = cartesian App (recombine ann1) (recombine ann2)
 recombine (App ann1 ann2) = cartesian App (recombine ann1) (recombine ann2)
 recombine (Abs v ann) = D.map (Abs v) $ recombine ann
-

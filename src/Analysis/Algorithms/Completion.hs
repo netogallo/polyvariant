@@ -7,8 +7,9 @@ import qualified Analysis.Types.Annotation as An
 import Analysis.Algorithms.Common
 import Control.Monad.State
 import Control.Applicative
-
- 
+import Control.Lens
+import qualified Data.Map as M
+  
 completion' :: (Monad m, Functor m) =>
                ((A.Type, [S.FlowVariable], [(Int,S.Sort)]) -> StateT RContext m (A.Type, [S.FlowVariable], [(Int,S.Sort)]))
                -> T.Type
@@ -17,18 +18,28 @@ completion' :: (Monad m, Functor m) =>
 completion' cont T.TBool _ = cont (A.TBool, [], [])
 completion' cont (T.Arr t1 t2) c0 = completion' cont' t1 [] >>= cont
   where
+    mkVar v = do
+      s <- (\(Just x) -> x) . M.lookup v <$> use fvGammas
+      if isAnnConstraint s
+        then return $ Left $ An.Var v
+        else return $ Right $ E.Var v
+    appEff e arg =
+      case arg of
+        Left ann -> E.AppAnn e ann
+        Right eff -> E.App e eff
     cont'' b1 (tau1,c1,freshVars1) (tau2,c2,freshVars2) = do
       b0 <- getFreshIx AnyAnnotation
       d0 <- getFreshIx AnyEffect
       let
         ffvs = map S.name $ c0 ++ [b1] ++ c1
-        eff = foldl E.App (E.Var d0) $ map E.Var ffvs
-        bi' = filter (S.isAnn . S.sort) c0
-        bj' = filter (S.isAnn . S.sort) c1
+      eff <- foldl appEff (E.Var d0) <$> mapM mkVar ffvs
+      let
+        bi' = filter (S.annSort . S.sort) c0
+        bj' = filter (S.annSort . S.sort) c1
         annvs = bi' ++ [b1] ++ bj'
         ann = foldl An.App (An.Var b0) $ map (An.Var . S.name) annvs
-        tau' = foldl (\s v -> \t -> s (A.Forall v t)) (A.Forall b1) c1
-        tau = tau' $ A.Arr (A.Ann tau1 (An.Var $ S.name b1)) eff (A.Ann tau2 ann)
+        tau' = A.Arr (A.Ann tau1 (An.Var $ S.name b1)) eff (A.Ann tau2 ann)
+        tau = foldr (\v t -> (A.Forall v t)) tau' $ b1:c1
         sd0 =
           let
             ss = map S.sort c0 ++ [S.Ann] ++ map S.sort c1 ++ [S.Eff]
