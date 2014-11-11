@@ -28,7 +28,7 @@ data Annotation =
            
 instance C.Fold Annotation Algebra where
   foldM = foldAnnM
-  byId = undefined
+  byId = annById
   baseAlgebra = algebra
   groupAlgebra =
     Algebra{
@@ -227,3 +227,10 @@ recombine (Var s) = D.singleton $ Var s
 -- recombine (App (Abs v ann) ann2) = cartesian App (recombine ann1) (recombine ann2)
 recombine (App ann1 ann2) = cartesian App (recombine ann1) (recombine ann2)
 recombine (Abs v ann) = D.map (Abs v) $ recombine ann
+
+annById i ann = execState (foldAnnM alg ann) Nothing
+  where
+    labelF i' l = do
+      unless (i /= i') $ put $ Just $ Label l
+      return $ Label l
+    alg = (C.byIdSetAlgebra i){flabel=labelF}

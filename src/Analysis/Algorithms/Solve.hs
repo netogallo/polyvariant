@@ -38,8 +38,9 @@ solveIt :: M.Map Int (D.Set (Either A.Annotation E.Effect, Int)) -> State (D.Set
 solveIt deps = do
   (worklist,analysis) <- get
   unless (D.size worklist == 0) $ do
-    let (e,x) = D.elemAt 0 worklist
-    let (analysis', isSubset) = case (e,(\(Just x) -> x) $ M.lookup x analysis) of
+    let (e',x) = D.elemAt 0 worklist
+    e <- lookupExpr e'
+    let (analysis', isSubset) = case (e,(\(Just w_1919) -> w_1919) $ M.lookup x analysis) of
           (Left a1, Left a2) | A.normalize (A.Union a1 a2) /= A.normalize a2 ->
             (M.insert x (Left $ A.Union a1 a2) analysis, False)
           (Left _, Left _) -> (analysis, True)
@@ -52,10 +53,23 @@ solveIt deps = do
                     else D.unions [D.deleteAt 0 worklist,fromMaybe D.empty $ M.lookup x deps]
     put (worklist',analysis')
     solveIt deps
+  where
+    lookupExpr e = do
+      analysis <- use _2
+      return $ case e of
+        Left (A.Var x) -> (\(Just w_1919) -> w_1919) $ M.lookup x analysis
+        Left ex -> Left ex
+        Right (E.Var x) -> (\(Just w_1919) -> w_1919) $ M.lookup x analysis
+        Right (E.Flow l (A.Var x)) ->
+          case (\(Just w_1919) -> w_1919) $ M.lookup x analysis of
+            (Left v) -> Right $ E.Flow l v
+            (Right e) -> error $ "Variable " ++ show x
+                         ++ " was expected to be an annotation. Found effect"
+        Right ex -> Right ex
 
 -- solve :: (Functor m, Monad m) => [(Either A.Annotation E.Effect, Int)] -> [Int] -> Int -> Int -> StateT RContext m ()
 solve c x b d = do
-  analysis <- (\x y z -> M.unions $ x ++ y ++ z)
+  analysis <- (\x y z -> M.fromList $ x ++ y ++ z)
               <$> mapM (analysisM . snd) c
               <*> (mapM analysisM $ [b,d])
               <*> mapM analysisC x
@@ -72,12 +86,12 @@ solve c x b d = do
   where
     analysisC v = do
       s' <- ((\(Just x) -> x) . M.lookup v) <$> use fvGammas
-      return $ M.fromList $ (:[]) $ if isAnnConstraint s'
+      return $ if isAnnConstraint s'
         then (v,Left $ A.Var v)
         else (v,Right $ E.Var v)
     analysisM v = do
       s' <- ((\(Just x) -> x) . M.lookup v) <$> use fvGammas
-      return $ M.fromList $ (:[]) $ (v,emptyTerm s')
+      return $ (v,emptyTerm s')
 
     freeVars expr' =
       let vars expr = map fst $ filter (not . C.bound) $ D.toList $ C.vars expr

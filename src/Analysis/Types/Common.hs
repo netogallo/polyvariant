@@ -1,4 +1,4 @@
-{-# Language MultiParamTypeClasses, FunctionalDependencies, ViewPatterns, TypeFamilies #-}
+{-# Language MultiParamTypeClasses, FunctionalDependencies, ViewPatterns, TypeFamilies, FlexibleContexts #-}
 module Analysis.Types.Common where
 import qualified Data.Map as M
 import qualified Analysis.Types.Sorts as S
@@ -6,6 +6,8 @@ import Data.Maybe
 import Control.Monad.State (put,get)
 import qualified Data.Set as D
 import Control.Monad.Identity (runIdentity)
+import Control.Monad hiding (foldM,void)
+import Control.Monad.State hiding (void,foldM)
 
 data Boundness = Bound | Free deriving (Show,Eq,Enum,Ord)
 
@@ -209,7 +211,7 @@ baseVarsAlg = mkGroupCalcAlgebra var abst app
 
 
 baseRedUnionAlg :: (LambdaCalculus a alg, Monad m, Ord a, WithSets a alg) => alg m a a
-baseRedUnionAlg = unionAlgebra defAlgebra appF' baseEmpty
+baseRedUnionAlg = mkCalcAlgebra baseVar baseAbst appF' 
   where
     appF' _ a1 a2 = return $ appC a1 a2
     appF _ a1 a2 =
@@ -240,3 +242,24 @@ unions = runIdentity . foldM alg
     emptyF _ = return $ setC D.empty
     alg = unionAlgebra baseAlgebra unionF emptyF
 
+byIdDual c i' i a1 a2 = do
+  unless (i /= i') $ put $ Just $ c a1 a2
+  return $ c a1 a2
+
+byIdAlgebra i = mkCalcAlgebra varF abstF appF
+  where
+    varF i' v = do
+      unless (i' /= i) $ put (Just (varC v))
+      return $ varC v
+    abstF i' v e = do
+      unless (i /= i') $ put (Just (abstC v e))
+      return $ abstC v e
+    appF i' a1 a2 = byIdDual appC i' i a1 a2
+
+byIdSetAlgebra :: (LambdaCalculus a alg, MonadState (Maybe a) m, Ord a, WithSets a alg) => Int -> alg m a a
+byIdSetAlgebra i = unionAlgebra (byIdAlgebra i) unF emptyF
+  where
+    unF i' a1 a2 = byIdDual unionC i' i a1 a2
+    emptyF i' = do
+      unless (i /= i') $ put (Just emptyC)
+      return emptyC

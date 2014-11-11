@@ -4,6 +4,7 @@ import Analysis.Types.LambdaCalc
 import Analysis.Types.Type
 import qualified Analysis.Types.Common as C
 
+t0 = Abs (C.Var 1 TBool) (If (Var 1) VTrue VFalse)
 
 t1 = Abs (C.Var 1 (Arr TBool TBool)) (
   If VTrue

@@ -69,15 +69,17 @@ reconstructionF s0 = C.foldM alg
       fif = iffF,
       fabs = absF}
     varF i v = do
+      -- The constraint {} c d0 is added artificially so the
+      -- constraint solving algorithm is easier to implement
       let Just (t,psi) = M.lookup v $ (\(Just x) -> x) $ M.lookup i $ s0 ^. gammas
       b0 <- getFreshIx (ASort S.Ann)
       d0 <- getFreshIx $ ASort S.Eff
-      return (t,b0,d0,[(Left $ An.Var psi, b0)])
+      return (t,b0,d0,[(Left $ An.Var psi, b0), (Right $ E.Empty, d0)])
 
     boolF i = do
       b0 <- getFreshIx $ ASort S.Ann
       d0 <- getFreshIx $ ASort S.Eff
-      return (At.TBool,b0,d0,[(Left $ An.Label (show i), b0)])
+      return (At.TBool,b0,d0,[(Left $ An.Label (show i), b0), (Right $ E.Empty, d0)])
 
     iffF i (_,b1,d1,c1) (t2,b2,d2,c2) (t3,b3,d3,c3) = do
       fvG <- use fvGammas

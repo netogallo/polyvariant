@@ -10,6 +10,9 @@ import Text.LaTeX.Base.Class
 import qualified Text.LaTeX.Base.Render as R
 import qualified Analysis.Types.Effect as E
 import qualified Analysis.Types.AnnType as At
+import qualified Analysis.Types.Common as C
+import qualified Data.Map as M
+import qualified Data.Set as D
 
 quad :: LaTeXC l => l
 quad = comm0 ";"
@@ -32,9 +35,9 @@ renderSort s =
     S.Eff -> typett $ texy $ pack "E"
     S.Arr a1@(S.Arr _ _) a2 -> autoParens (renderSort a1) <> to <> renderSort a2
     S.Arr a1 a2 -> renderSort a1 <> to <> renderSort a2
-
+    
 renderAnn :: LaTeXC l => A.Annotation -> l
-renderAnn = runIdentity . A.foldAnnM alg
+renderAnn ann = runIdentity $ A.foldAnnM alg ann
   where
     varf :: LaTeXC l => Int -> Int -> Identity l
     varf _ v = return $ beta ^: texy v
@@ -46,7 +49,9 @@ renderAnn = runIdentity . A.foldAnnM alg
     appf _ a1 a2 = return $ a1 <> quad <> a2
     labelf _ l = return $ textbf $ stexy $ "@" ++ l
     unionf :: LaTeXC l => Int -> l -> l -> Identity l
-    unionf _ a1 a2 = return $ cup (autoBraces a1) (autoBraces a2)
+    unionf i _ _ =
+      let A.Set s = C.unions $ (\(Just x) -> x) $ C.byId i ann
+      in return $ texy s
     emptyf _ = return $ autoBraces $ texy $ pack ""
     alg :: LaTeXC l => A.Algebra Identity A.Annotation l
     alg = A.Algebra{
@@ -59,7 +64,7 @@ renderAnn = runIdentity . A.foldAnnM alg
     }
 
 renderEff :: LaTeXC l => E.Effect -> l
-renderEff = runIdentity . E.foldEffectM alg
+renderEff elm = runIdentity $ E.foldEffectM alg elm
   where
     varf _ v = return $ delta ^: texy v
     appf _ a1 a2 = return $ a1 <> quad <> a2
@@ -69,7 +74,9 @@ renderEff = runIdentity . E.foldEffectM alg
               | otherwise = delta ^: (texy $ S.name v)
       in return $ lambda <> var <> (stexy ":")
          <> texy (S.sort v) <> quad <> (stexy ".") <> quad <> b
-    unionf _ e1 e2 = return $ cup (autoBraces e1) (autoBraces e2)
+    unionf i _ _ =
+      let (E.Set s) = C.unions $ (\(Just x) -> x) $ C.byId i elm
+      in return $ texy s
     flowf _ l ann = return $ autoParens $ (textbf $ stexy $ "@" ++ l) <> stexy "," <> texy ann
     emptyf _ = return $ autoBraces $ texy $ pack ""
     alg = E.Algebra {
@@ -114,3 +121,8 @@ instance Texy E.Effect where
 
 instance Texy At.Type where
   texy = renderAnnType
+
+instance Texy e => Texy (D.Set e) where
+  texy s
+    | D.null s = autoBraces $ stexy ""
+    | otherwise = autoBraces $ D.fold (\e s -> texy e <> stexy "," <> s) (texy $ D.elemAt 0 s) $ D.deleteAt 0 s

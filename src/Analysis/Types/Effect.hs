@@ -24,7 +24,7 @@ data Effect =
 
 instance C.Fold Effect Algebra where
   foldM = foldEffectM
-  byId = undefined
+  byId = effById
   baseAlgebra = algebra
   groupAlgebra =
     Algebra {
@@ -107,6 +107,16 @@ algebra = Algebra{
   }
   where
     un c _ a1 a2 = return $ c a1 a2
+
+effById i eff = execState (foldEffectM alg eff) Nothing
+  where
+    flowF i' lbl ann = do
+      unless (i /= i') $ put (Just (Flow lbl ann))
+      return $ Flow lbl ann
+    appAnnF i' eff ann = do
+      unless (i /= i') $ put (Just $ AppAnn eff ann)
+      return $ AppAnn eff ann
+    alg = (C.byIdSetAlgebra i){fflow = flowF, fappAnn=appAnnF}
 
 foldEffectM f@Algebra{..} a0 = evalStateT (foldEffectM' undefined a0) 0
   where
