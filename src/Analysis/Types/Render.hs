@@ -2,7 +2,7 @@ module Analysis.Types.Render where
 import Text.LaTeX.Packages.AMSMath
 import Text.LaTeX.Base.Texy
 import Text.LaTeX.Base
-import Data.Text
+import Data.Text hiding (group)
 import qualified Analysis.Types.Annotation as A
 import qualified Analysis.Types.Sorts as S
 import Control.Monad.Identity
@@ -16,6 +16,11 @@ import qualified Data.Set as D
 
 quad :: LaTeXC l => l
 quad = comm0 ";"
+
+group e = raw (pack "{") <> e <> raw (pack "}")
+
+appL :: LaTeXC l => l
+appL = stexy "*"
 
 xrightarrow l = comm1 "xrightarrow" l
 
@@ -46,7 +51,7 @@ renderAnn ann = runIdentity $ A.foldAnnM alg ann
                            <> stexy ":"
                            <> renderSort s
                            <> quad <> stexy "." <> quad <> b
-    appf _ a1 a2 = return $ a1 <> quad <> a2
+    appf _ a1 a2 = return $ a1 <> appL <> a2
     labelf _ l = return $ textbf $ stexy $ "@" ++ l
     unionf :: LaTeXC l => Int -> l -> l -> Identity l
     unionf i _ _ =
@@ -67,8 +72,8 @@ renderEff :: LaTeXC l => E.Effect -> l
 renderEff elm = runIdentity $ E.foldEffectM alg elm
   where
     varf _ v = return $ delta ^: texy v
-    appf _ a1 a2 = return $ a1 <> quad <> a2
-    appAnnf _ eff ann = return $ eff <> quad <> texy ann
+    appf _ a1 a2 = return $ a1 <> appL <> a2
+    appAnnf _ eff ann = return $ eff <> appL <> texy ann
     absf _ v b =
       let var | S.annSort $ S.sort v = beta ^: (texy $ S.name v)
               | otherwise = delta ^: (texy $ S.name v)
@@ -99,7 +104,7 @@ renderAnnType = runIdentity . At.foldTypeM alg
       in return $ forall <> v <> stexy ":"
          <> texy (S.sort fv) <> quad <> stexy "." <> quad
          <> t
-    annf _ t ann = return $ t ^: (texy ann)
+    annf _ t ann = return $ autoParens t ^: (texy ann)
     arrf _ t1 eff t2 = return $ autoParens t1 <> xrightarrow (texy eff) <> t2
     alg :: LaTeXC l => At.Algebra Identity At.Type l
     alg = At.Algebra{
