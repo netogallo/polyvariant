@@ -69,6 +69,7 @@ reconstructionF s0 = C.foldM alg
       fvtrue = boolF,
       fvar = varF,
       fif = iffF,
+      fapp = appF,
       fabs = absF}
     varF i v = do
       -- The constraint {} c d0 is added artificially so the
@@ -85,11 +86,14 @@ reconstructionF s0 = C.foldM alg
       let omega = M.insert b2' (Left $ An.Var b2) $ match M.empty t2 t2'
           (annOmega,_) = M.mapEither id omega
           c = [
-            (Right $ E.Var d1,d),(Right $ E.Var d2,d),(Right $ E.Flow i b1,d),
-            (Right $ E.replaceFree omega phi',d),
-            (Left $ An.replaceFree annOmega psi', b)
+            (Right $ E.Var d1,d),(Right $ E.Var d2,d),(Right $ E.Flow (show i) (An.Var b1),d),
+            (Right $ rPhi phi',d),
+            (Left $  rPsi psi', b)
             ] ++ c1 ++ c2
-      return (At.normalize $ At.replaceFree omega t',b,d,c)
+          rPhi phi = E.replaceFree omega phi
+          rPsi psi = An.replaceFree annOmega psi
+          rTprime ty = At.replaceFree omega ty
+      return (At.normalize $ rTprime t',b,d,c)
       
 
     boolF i = do
@@ -121,7 +125,8 @@ reconstructionF s0 = C.foldM alg
           gamma = (\(Just x) -> x) . M.lookup i $ s0 ^. gammas
           ffv = map (snd . snd) $ M.toList $ M.delete (C.name var) gamma
           x = D.fromList $ [b1] ++ map S.name xis ++ ffv
-      (psi1,phi0) <- solve c1 (D.toList x) b2 d0
+          solver c x b d = solve c x b d
+      (psi1,phi0) <- solver c1 (D.toList x) b2 d0
       let t' = At.Arr (At.Ann t1 (An.Var b1)) phi0 (At.Ann t2 psi1)
           t = At.Forall (S.Var b1 S.Ann) $ foldr (\v t -> At.Forall v t) t' xis
       b0 <- getFreshIx $ ASort S.Ann

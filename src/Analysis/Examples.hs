@@ -12,3 +12,8 @@ t2 = Abs (C.Var 1 (Arr TBool TBool)) (
   If VTrue
   (Var 1)
   (Abs (C.Var 2 TBool) (Var 2)))
+
+t3 = Abs (C.Var 1 (Arr TBool TBool)) (
+  If (App (Var 1) VTrue)
+  VFalse
+  VTrue)

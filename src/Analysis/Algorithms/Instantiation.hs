@@ -15,6 +15,6 @@ inst t =
       let rep = if S.annSort $ S.sort v
                 then Left (A.Var v')
                 else Right (E.Var v')
-      replaceFree (M.fromList [(S.name v,rep)]) <$> inst t
+      replaceFree (M.fromList [(S.name v,rep)]) <$> inst t1
     t -> return t
         

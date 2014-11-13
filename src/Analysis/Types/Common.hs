@@ -252,7 +252,7 @@ baseVarsAlg = mkGroupCalcAlgebra var abst app
 
 
 baseRedUnionAlg :: (LambdaCalculus a alg, Monad m, Ord a, WithSets a alg) => alg m a a
-baseRedUnionAlg = mkCalcAlgebra baseVar baseAbst appF' 
+baseRedUnionAlg = mkCalcAlgebra baseVar baseAbst appF
   where
     appF' _ a1 a2 = return $ appC a1 a2
     appF _ a1 a2 =

@@ -40,7 +40,8 @@ solveIt deps = do
   unless (D.size worklist == 0) $ do
     let (e',x) = D.elemAt 0 worklist
     e <- lookupExpr e'
-    let (analysis', isSubset) = case (e,(\(Just w_1919) -> w_1919) $ M.lookup x analysis) of
+    let (e1,e2) = (e,(\(Just w_1919) -> w_1919) $ M.lookup x analysis)
+    let (analysis', isSubset) = case (e1,e2) of
           (Left a1, Left a2) | A.normalize (A.Union a1 a2) /= A.normalize a2 ->
             (M.insert x (Left $ A.Union a1 a2) analysis, False)
           (Left _, Left _) -> (analysis, True)
@@ -56,16 +57,20 @@ solveIt deps = do
   where
     lookupExpr e = do
       analysis <- use _2
+      let (annAnalysis,_) = M.mapEither id analysis
       return $ case e of
-        Left (A.Var x) -> (\(Just w_1919) -> w_1919) $ M.lookup x analysis
-        Left ex -> Left ex
-        Right (E.Var x) -> (\(Just w_1919) -> w_1919) $ M.lookup x analysis
-        Right (E.Flow l (A.Var x)) ->
-          case (\(Just w_1919) -> w_1919) $ M.lookup x analysis of
-            (Left v) -> Right $ E.Flow l v
-            (Right e) -> error $ "Variable " ++ show x
-                         ++ " was expected to be an annotation. Found effect"
-        Right ex -> Right ex
+        Left ann -> Left $ A.replaceFree annAnalysis ann
+        Right eff -> Right $ E.replaceFree analysis eff
+
+        -- Left (A.Var x) -> (\(Just w_1919) -> w_1919) $ M.lookup x analysis
+        -- Left ex -> Left ex
+        -- Right (E.Var x) -> (\(Just w_1919) -> w_1919) $ M.lookup x analysis
+        -- Right (E.Flow l (A.Var x)) ->
+        --   case (\(Just w_1919) -> w_1919) $ M.lookup x analysis of
+        --     (Left v) -> Right $ E.Flow l v
+        --     (Right e) -> error $ "Variable " ++ show x
+        --                  ++ " was expected to be an annotation. Found effect"
+        -- Right ex -> Right ex
 
 -- solve :: (Functor m, Monad m) => [(Either A.Annotation E.Effect, Int)] -> [Int] -> Int -> Int -> StateT RContext m ()
 solve c x b d = do
@@ -77,7 +82,7 @@ solve c x b d = do
               >>= return . (\s0 -> foldl depsExtend s0 c)
               
   let worklist = D.fromList c
-      (_,res) = execState (solveIt deps) (worklist,analysis)
+      (_,res) = trace (show (deps,worklist,analysis)) execState (solveIt deps) (worklist,analysis)
   return $ case ((\(Just x) -> x) $ M.lookup b res, (\(Just x) -> x) $ M.lookup d res) of
     (Left ann, Right eff) -> (ann,eff)
     err -> error $ "Invalid result for solve: " ++ show err

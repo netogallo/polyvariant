@@ -1,8 +1,9 @@
+{-# Language ScopedTypeVariables #-}
 module Analysis.Types.Render where
 import Text.LaTeX.Packages.AMSMath
 import Text.LaTeX.Base.Texy
 import Text.LaTeX.Base
-import Data.Text hiding (group)
+import Data.Text hiding (group,map,groupBy,zip,foldl1)
 import qualified Analysis.Types.Annotation as A
 import qualified Analysis.Types.Sorts as S
 import Control.Monad.Identity
@@ -13,6 +14,7 @@ import qualified Analysis.Types.AnnType as At
 import qualified Analysis.Types.Common as C
 import qualified Data.Map as M
 import qualified Data.Set as D
+import Data.List
 
 quad :: LaTeXC l => l
 quad = comm0 ";"
@@ -23,6 +25,27 @@ appL :: LaTeXC l => l
 appL = stexy "*"
 
 xrightarrow l = comm1 "xrightarrow" l
+
+concatWith :: [a] -> [[a]] -> [a]
+concatWith c [] = []
+concatWith c xs@(_:_) = Data.List.tail $ Data.List.foldl (\x s -> x ++ c ++ s) [] xs
+
+sexyset :: forall l t .(LaTeXC l,Texy t) => Int -> D.Set t -> l
+sexyset n xs' =
+  let xs = D.toList xs'
+      groups :: [[t]]
+      groups = map (map snd) . groupBy grp . sortBy srt $ zip [1..] xs
+      grp a b = (fst a :: Int) `mod` n == (fst b :: Int) `mod` n
+      srt a b = compare (fst a `mod` n) (fst b `mod` n)
+      dims = concatWith " " $ map (const "c") groups
+      join e [] = mempty
+      join e [x] = x
+      join e xs = foldl1 (\a b -> a `e` b) xs
+      render1 :: [LaTeX]
+      render1 = map (join (&) . map texy) groups
+      render2 = unpack $ render $ (join (\a b -> a <> lnbk <> b) render1 :: LaTeX)
+  in raw . pack $ "\\begin{array}{"++dims++"}"++render2++"\\end{array}"
+      
 
 renderFile f = R.renderFile f . mkLatex
 
@@ -105,7 +128,11 @@ renderAnnType = runIdentity . At.foldTypeM alg
          <> texy (S.sort fv) <> quad <> stexy "." <> quad
          <> t
     annf _ t ann = return $ autoParens t ^: (texy ann)
-    arrf _ t1 eff t2 = return $ autoParens t1 <> xrightarrow (texy eff) <> t2
+    arrf _ t1 eff' t2 =
+      let eff = case eff' of
+            E.Set s -> sexyset 1 s
+            _ -> texy eff'
+      in return $ autoParens t1 <> xrightarrow eff <> t2
     alg :: LaTeXC l => At.Algebra Identity At.Type l
     alg = At.Algebra{
       At.ftbool = tboolf,
