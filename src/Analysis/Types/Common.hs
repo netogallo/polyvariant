@@ -153,10 +153,39 @@ baseUnionRepAlg base' offset e = groupUnionAlgebra (baseRepAlg base' offset e) u
 
 mkCalcAlgebra varF abstF appF = baseCalcAlgebra (baseAbstAlgebra baseAlgebra abstF) varF appF
 mkGroupCalcAlgebra varF abstF appF = groupCalcAlgebra (groupAbstAlgebra groupAlgebra abstF) varF appF
-    
-shadows v = runIdentity . foldM alg
+
+boundedVarsAlg :: (Monad m, WithAbstraction a alg) => alg m a (M.Map Int (D.Set Int))
+boundedVarsAlg = groupAbstAlgebra groupAlgebra abstF
   where
-    alg = mkGroupCalcAlgebra varF abstF appF
+    abstF i v s = return $ M.map (D.insert $ S.name v) $ M.insert i D.empty s
+    
+boundedVarsCalcAlg :: (Monad m, LambdaCalculus a alg) => alg m a (M.Map Int (D.Set Int))
+boundedVarsCalcAlg = groupCalcAlgebra (boundedVarsAlg) varF appF
+  where
+    varF i _ = return $ M.fromList [(i,D.empty)]
+    appF i a1 a2 = return $ M.insert i D.empty $ M.union a1 a2
+
+getBoundVars :: (LambdaCalculus a alg) => a -> M.Map Int (D.Set Int)
+getBoundVars = runIdentity . foldM boundedVarsCalcAlg
+
+boundedVarsSetAlg :: (Monad m,LambdaCalculus a alg, WithSets a alg) => alg m a (M.Map Int (D.Set Int))
+boundedVarsSetAlg = groupUnionAlgebra boundedVarsCalcAlg unionF emptyF
+  where
+    unionF i a1 a2 = return $ M.insert i D.empty $ M.union a1 a2
+    emptyF i = return $ M.fromList [(i,D.empty)]
+
+allShadowedBaseAlg :: (LambdaCalculus a alg, Monad m) => alg m a (M.Map Int (Int,Bool))
+allShadowedBaseAlg = mkGroupCalcAlgebra varF abstF baseGApp
+  where
+    varF i v = return $ M.fromList [(i,(v,False))]
+    abstF _ v s = return $ M.map (\val@(v',_) -> if S.name v == v' then (S.name v,True) else val) s
+    
+shadows v arg = runIdentity $ do
+  ss <- foldM allShadowedBaseAlg arg
+  return $ M.foldWithKey (\k (v',isShadowed) s -> if v == v' then M.insert k isShadowed s else s) M.empty ss
+
+shadowsBaseAlg v = mkGroupCalcAlgebra varF abstF appF
+  where
     appF _ s1 s2 = return $ M.union s1 s2
     varF i v'
       | v == v' = return $ M.fromList [(i,False)]
@@ -164,6 +193,18 @@ shadows v = runIdentity . foldM alg
     abstF i v' s
       | S.name v' == v = return $ M.map (const True) s
       | otherwise = return s
+
+-- Algebra to replace the given free variables
+baseReplaceAlg rep elm = alg
+  where
+    boundVars i = (\(Just w_1919) -> w_1919) $ M.lookup i $ getBoundVars elm
+    isBound i v = D.member v $ boundVars i
+    varf i v =
+      case M.lookup v rep of
+        Nothing -> return $ varC v
+        _ | isBound i v -> return $ varC v
+        Just new -> return new
+    alg = mkCalcAlgebra varf baseAbst baseApp
 
 baseAppAlg :: (Fold a alg,LambdaCalculus a alg, Monad m) => a -> a -> alg m a a
 baseAppAlg (abst -> Just (var,a1)) a2 = alg $ lambdaDepths a1

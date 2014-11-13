@@ -9,6 +9,7 @@ import qualified Data.Map as M
 import qualified Analysis.Types.Common as C
 import Data.Maybe
 import Control.Applicative
+import qualified Data.Set as D
 
 data Type =
   TBool
@@ -125,6 +126,28 @@ reduce' = runIdentity . foldTypeM alg
       fann = annF,
       farr = arrF
       }
+
+getBoundVars :: Type -> M.Map Int (D.Set Int)
+getBoundVars = runIdentity . foldTypeM alg
+  where
+    alg = (C.boundedVarsAlg :: Algebra Identity Type (M.Map Int (D.Set Int))) {
+      fann=annF,
+      farr=arrF}
+    annF i s _ = return $ M.insert i D.empty s
+    arrF i s1 _ s2 = return $ M.insert i D.empty $ M.union s1 s2
+
+replaceFree :: M.Map Int (Either A.Annotation E.Effect) -> Type -> Type
+replaceFree rep type' = runIdentity $ foldTypeM alg type'
+  where
+    (annReps,_) = M.mapEither id rep
+    boundVars i = (\(Just w_1919) -> w_1919) $ M.lookup i $ getBoundVars type'
+    isBound i v = D.member v $ boundVars i
+    annReplacements i = M.filterWithKey (\k _ -> not (isBound i k)) annReps
+    effReplacements i = M.filterWithKey (\k _ -> not (isBound i k)) rep
+    annF i s ann = return $ Ann s $ A.replaceFree (annReplacements i) ann
+    arrF i s1 eff s2 = return $ Arr s1 (E.replaceFree (effReplacements i) eff) s2
+    alg = algebra{
+      fann=annF,farr=arrF}
 
 reduce e = if reduce' e == e then e else reduce $ reduce' e
 

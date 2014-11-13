@@ -169,12 +169,10 @@ rename ren = runIdentity . (foldAnnM alg)
     fvar v = return $ Var $ M.findWithDefault v v ren
     fabs v s = return $ Abs v{S.name=M.findWithDefault (S.name v) (S.name v) ren} s
 
-replace rep = runIdentity . (foldAnnM alg)
+replaceFree rep ann = runIdentity $ foldAnnM alg ann
   where
-    alg = algebra{
-      fvar = const $ \v -> return $ M.findWithDefault (Var v) v rep
-      }
-
+    alg = C.baseReplaceAlg rep ann
+      
 -- Increase or decrease the `depth` of all bound variables in the expression
 incrementWithBase base i ann = runIdentity $ foldAnnM alg ann
   where

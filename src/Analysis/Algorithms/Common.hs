@@ -18,7 +18,6 @@ data SortConstraint =
   | AnyAnnotation
   | ASort S.Sort
   deriving (Show,Eq)
-                                                  
 
 isAnnConstraint c =
   case c of

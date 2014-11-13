@@ -95,6 +95,11 @@ data Algebra m t a =
     fempty :: Int -> m a
     }
 
+mApp e = case e of
+  AppAnn e a -> Just $ (e,Left a)
+  App e1 e2 -> Just $ (e1,Right e2)
+  _ -> Nothing
+
 algebra :: Monad m => Algebra m Effect Effect
 algebra = Algebra{
   fvar = \_ v -> return $ Var v,
@@ -180,6 +185,26 @@ vars = runIdentity . C.foldM alg
       fflow = flow,
       fappAnn = fappAnn
       }
+
+getBoundVars :: Effect -> M.Map Int (D.Set Int)
+getBoundVars = runIdentity . foldEffectM alg
+  where
+    alg = (C.boundedVarsSetAlg :: Algebra Identity Effect (M.Map Int (D.Set Int))) {fflow=flowF,fappAnn=appAnnF}
+    appAnnF i s _ = return $ M.insert i D.empty s
+    flowF i _ _ = return $ M.fromList [(i,D.empty)]
+
+replaceFree :: M.Map Int (Either A.Annotation Effect) -> Effect -> Effect
+replaceFree rep bigEffect = runIdentity $ foldEffectM alg bigEffect
+  where
+    (annReps,effReps) = M.mapEither id rep
+    boundVars i = (\(Just w_1919) -> w_1919) $ M.lookup i $ getBoundVars bigEffect
+    annReplacements i =
+      let isBound v = D.member v $ boundVars i
+      in M.filterWithKey (\k _ -> not (isBound k)) annReps
+    appAnnF i eff ann = return $ AppAnn eff $ A.replaceFree (annReplacements i) ann
+    flowF i l ann = return $ Flow l $ A.replaceFree (annReplacements i) ann
+    alg = (C.baseReplaceAlg effReps bigEffect :: Algebra Identity Effect Effect){
+      fflow=flowF,fappAnn=appAnnF}
 
 increment i eff' = runIdentity $ C.foldM alg eff'
   where
