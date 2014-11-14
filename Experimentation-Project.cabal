@@ -17,23 +17,32 @@ cabal-version:       >=1.10
 
 executable Experimentation-Project
   main-is:             Main.hs
+  ghc-options:         -ddump-splices
   other-modules:       Analysis.Types.AnnType
                        ,Analysis.Types.Sorts
                        ,Analysis.Types.Type
                        ,Analysis.Types.Effect
-                       ,Analysis.Types.Annotation
-                       ,Analysis.Types.AnnotationTests
-                       ,Analysis.Types.EffectTests
+                       -- ,Analysis.Types.Annotation
+                       -- ,Analysis.Types.AnnotationTests
+                       -- ,Analysis.Types.EffectTests
                        ,Analysis.Algorithms.Completion
+                       ,Analysis.Algorithms.Reconstruction
+                       ,Analysis.Algorithms.Common
+                       ,Analysis.Algorithms.Instantiation
+                       ,Analysis.Algorithms.Join
+                       ,Analysis.Algorithms.Match
+                       ,Analysis.Algorithms.Solve
                        
   -- other-extensions:    
   build-depends:       base >=4.7 && <4.8
                        ,mtl >= 2.2.1
                        ,containers >= 0.5
-                       ,QuickCheck >= 2.7
+--                       ,QuickCheck >= 2.7
                        ,lens >= 4.3
                        ,HaTeX >= 3.13
                        ,text >= 1.1
+                       ,ghcjs-base >= 0.1
+                       ,ghcjs-dom >= 0.1
   hs-source-dirs:      src
-                       ,test
+ --                      ,test
   default-language:    Haskell2010

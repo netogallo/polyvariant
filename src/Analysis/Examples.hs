@@ -17,3 +17,5 @@ t3 = Abs (C.Var 1 (Arr TBool TBool)) (
   If (App (Var 1) VTrue)
   VFalse
   VTrue)
+
+allExamples = [t0,t1,t2,t3]

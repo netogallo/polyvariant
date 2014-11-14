@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <script language="javascript" src="lib.js"></script>
+    <script language="javascript" src="rts.js"></script>
+    <script language="javascript" src="lib1.js"></script>
+    <script language="javascript" src="out.js"></script>
+    <script type="text/x-mathjax-config;executed=true">
+      MathJax.Hub.Config({tex2jax: {inlineMath: [['$','$'], ['\\(','\\)']]}});
+    </script>
+    <script src="http://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript">
+    </script>
+    <script type="text/javascript">
+      function reRender(){
+          MathJax.Hub.Queue(["Typeset",MathJax.Hub]);
+      }
+    </script>
+  </head>
+  <body>
+    <h1> LambdaKraft </h1>
+    <p> This is an implementation of the analysis named <a href="http://dl.acm.org/citation.cfm?id=1863554">Polyvariant Flow Analysis with Higher-ranked Polymorphic Types and Higher-order Effect Operators</a> created by Jurriaan Hage and Stefan Holdermans. </p>
+    <textarea rows="10" cols="200" id="calcInput"></textarea>
+    <input type="submit" id="compileInput" value="compile"></input>
+    <div id="examplesDiv"></div>
+    <h4>Type</h4>
+    <div id="typeRenderDiv"></div>
+    <h4>Expression</h4>
+    <div id="calcRenderDiv"></div>
+  </body>
+  <script language="javascript">
+    h$main(h$mainZCMainzimain);
+  </script>
+</html>

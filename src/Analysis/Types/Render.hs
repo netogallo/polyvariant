@@ -3,7 +3,7 @@ module Analysis.Types.Render where
 import Text.LaTeX.Packages.AMSMath
 import Text.LaTeX.Base.Texy
 import Text.LaTeX.Base
-import Data.Text hiding (group,map,groupBy,zip,foldl1)
+import Data.Text hiding (group,map,groupBy,zip,foldl1,replicate)
 import qualified Analysis.Types.Annotation as A
 import qualified Analysis.Types.Sorts as S
 import Control.Monad.Identity
@@ -15,6 +15,8 @@ import qualified Analysis.Types.Common as C
 import qualified Data.Map as M
 import qualified Data.Set as D
 import Data.List
+import qualified Analysis.Types.LambdaCalc as L
+import qualified Analysis.Types.Type as Ty
 
 quad :: LaTeXC l => l
 quad = comm0 ";"
@@ -37,14 +39,14 @@ sexyset n xs' =
       groups = map (map snd) . groupBy grp . sortBy srt $ zip [1..] xs
       grp a b = (fst a :: Int) `mod` n == (fst b :: Int) `mod` n
       srt a b = compare (fst a `mod` n) (fst b `mod` n)
-      dims = concatWith " " $ map (const "c") groups
+      dims = concatWith " " $ replicate n "c"
       join e [] = mempty
       join e [x] = x
       join e xs = foldl1 (\a b -> a `e` b) xs
       render1 :: [LaTeX]
       render1 = map (join (&) . map texy) groups
       render2 = unpack $ render $ (join (\a b -> a <> lnbk <> b) render1 :: LaTeX)
-  in raw . pack $ "\\begin{array}{"++dims++"}"++render2++"\\end{array}"
+  in autoBraces $ raw . pack $ "\\begin{array}{"++dims++"}"++render2++"\\end{array}"
       
 
 renderFile f = R.renderFile f . mkLatex
@@ -63,7 +65,13 @@ renderSort s =
     S.Eff -> typett $ texy $ pack "E"
     S.Arr a1@(S.Arr _ _) a2 -> autoParens (renderSort a1) <> to <> renderSort a2
     S.Arr a1 a2 -> renderSort a1 <> to <> renderSort a2
-    
+
+renderType t =
+  case t of
+    Ty.TBool -> (typett $ texy $ pack "B")
+    Ty.Arr t1@(Ty.Arr _ _) t2 -> autoParens (renderType t1) <> to <> renderType t2
+    Ty.Arr t1 t2 -> renderType t1 <> to <> renderType t2
+
 renderAnn :: LaTeXC l => A.Annotation -> l
 renderAnn ann = runIdentity $ A.foldAnnM alg ann
   where
@@ -141,6 +149,42 @@ renderAnnType = runIdentity . At.foldTypeM alg
       At.farr = arrf
       }
 
+renderLambdaCalc :: (LaTeXC l, Texy t) => (L.LambdaCalc t) -> l
+renderLambdaCalc expr = runIdentity $ L.foldLambdaCalcM alg expr
+  where
+    label i l = autoParens l ^: mathit (stexy $ "@" ++ show i)
+    var v = stexy "x" ^: stexy (show v)
+    varF i v = return $ var v
+    bool b i = return $ label i $ mathbf $ stexy b
+    vfalseF :: LaTeXC l => Int -> Identity l
+    vfalseF = bool "False"
+    vtrueF :: LaTeXC l => Int -> Identity l
+    vtrueF = bool "True"
+    absF i (C.Var v s) e =
+      return $ label i $
+        lambda <> var v <> stexy ":"
+        <> texy s <> quad <> stexy "."
+        <> quad <> e
+    ifF i cond yes no = return $ label i $
+      mathbf (stexy "if") <> quad <> cond
+      <> quad <> mathbf (stexy "then") <> quad <> yes
+      <> quad <> mathbf (stexy "else") <> quad <> no
+    appF i a1 a2 = return $ label i $ a1 <> appL <> a2
+    alg :: (LaTeXC l,Texy t) => L.Algebra t Identity (L.LambdaCalc t) l
+    alg = L.Algebra{
+      L.fvar = varF,
+      L.fvfalse = vfalseF,
+      L.fvtrue = vtrueF,
+      L.fabs = absF,
+      L.fif = ifF,
+      L.fapp = appF
+      }
+
+instance Texy Ty.Type where
+  texy = renderType
+
+instance Texy t => Texy (L.LambdaCalc t) where
+  texy = renderLambdaCalc
 
 instance Texy S.Sort where
   texy = renderSort

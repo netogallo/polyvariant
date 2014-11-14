@@ -12,8 +12,11 @@ import Control.Monad.State hiding (void,foldM)
 data Boundness = Bound | Free deriving (Show,Eq,Enum,Ord)
 
 data Variable t =
-  Var {name :: Int, set :: t}
+  Var Int t
   deriving (Eq, Read, Show, Ord)
+
+name (Var n _) = n
+set (Var _ s) = s
 
 class Group a where
   void :: a

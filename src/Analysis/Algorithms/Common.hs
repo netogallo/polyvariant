@@ -34,9 +34,46 @@ data RContext = RContext{
   _fvGammas:: M.Map Int SortConstraint
  }
 
+freshIx :: Lens' RContext Int
+freshIx _f_aKJ7 (RContext __freshIx'_aKJ8 __fvGammas_aKJa)
+      = ((\ __freshIx_aKJ9 -> RContext __freshIx_aKJ9 __fvGammas_aKJa)
+         <$> (_f_aKJ7 __freshIx'_aKJ8))
+{-# INLINE freshIx #-}
+fvGammas :: Lens' RContext (M.Map Int SortConstraint)
+fvGammas _f_aKJb (RContext __freshIx_aKJc __fvGammas'_aKJd)
+      = ((\ __fvGammas_aKJe -> RContext __freshIx_aKJc __fvGammas_aKJe)
+         <$> (_f_aKJb __fvGammas'_aKJd))
+{-# INLINE fvGammas #-}
+
+completions :: Lens' RState (M.Map Int (AT.Type, [S.FlowVariable]))
+completions
+      _f_aKLO
+      (RState __freshFlowVars_aKLP __completions'_aKLQ __gammas_aKLS)
+      = ((\ __completions_aKLR
+            -> RState __freshFlowVars_aKLP __completions_aKLR __gammas_aKLS)
+         <$> (_f_aKLO __completions'_aKLQ))
+{-# INLINE completions #-}
+freshFlowVars :: Lens' RState (M.Map Int (M.Map FreshVar Int))
+freshFlowVars
+      _f_aKLT
+      (RState __freshFlowVars'_aKLU __completions_aKLW __gammas_aKLX)
+      = ((\ __freshFlowVars_aKLV
+            -> RState __freshFlowVars_aKLV __completions_aKLW __gammas_aKLX)
+         <$> (_f_aKLT __freshFlowVars'_aKLU))
+{-# INLINE freshFlowVars #-}
+gammas :: Lens' RState (M.Map Int (M.Map Int (AT.Type, Int)))
+gammas
+      _f_aKLY
+      (RState __freshFlowVars_aKLZ __completions_aKM0 __gammas'_aKM1)
+      = ((\ __gammas_aKM2
+            -> RState __freshFlowVars_aKLZ __completions_aKM0 __gammas_aKM2)
+         <$> (_f_aKLY __gammas'_aKM1))
+{-# INLINE gammas #-}
+
+
 rcontext = RContext (-1) M.empty
 
-makeLenses ''RContext
+-- makeLenses ''RContext
 
 data RState = RState{
   _freshFlowVars :: M.Map Int (M.Map FreshVar Int),
@@ -47,7 +84,7 @@ data RState = RState{
 instance Show RState where
   show s = show $ _freshFlowVars s
 
-makeLenses ''RState
+-- makeLenses ''RState
 
 instance CT.Group RState where
   void = RState M.empty M.empty M.empty
