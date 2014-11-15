@@ -138,7 +138,7 @@ renderAnnType = runIdentity . At.foldTypeM alg
     annf _ t ann = return $ autoParens t ^: (texy ann)
     arrf _ t1 eff' t2 =
       let eff = case eff' of
-            E.Set s -> sexyset 1 s
+            E.Set s -> texy s -- sexyset 1 s
             _ -> texy eff'
       in return $ autoParens t1 <> xrightarrow eff <> t2
     alg :: LaTeXC l => At.Algebra Identity At.Type l
@@ -201,4 +201,4 @@ instance Texy At.Type where
 instance Texy e => Texy (D.Set e) where
   texy s
     | D.null s = autoBraces $ stexy ""
-    | otherwise = autoBraces $ D.fold (\e s -> texy e <> stexy "," <> s) (texy $ D.elemAt 0 s) $ D.deleteAt 0 s
+    | otherwise = autoBraces $ D.fold (\e s -> texy e <> stexy ";" <> quad <> s) (texy $ D.elemAt 0 s) $ D.deleteAt 0 s
