@@ -19,10 +19,40 @@
   <body>
     <h1> LambdaKraft </h1>
     <p> This is an implementation of the analysis named <a href="http://dl.acm.org/citation.cfm?id=1863554">Polyvariant Flow Analysis with Higher-ranked Polymorphic Types and Higher-order Effect Operators</a> created by Jurriaan Hage and Stefan Holdermans. </p>
+    <div>
+      <h3> Grammar </h3>
+      <p><b>Expression</b> ::= Variable | Abstraction | Application | Value | IF-Statement</p>
+      <p><b>Type</b> ::= BoolType | Arrow</p>
+      <table border="1">
+	<tr>
+	  <td> <b> Term Name </b> </td> <td> <b> Term Syntax (Paper) </b> </td> <td> <b> Term Representation (Textually) </b> </td>
+	</tr>
+	<tr>
+	  <td> Variable ::=&nbsp; </td> <td> $$ x^{i} $$ </td> <td> Var i </td>
+	</tr>
+	<tr> 
+	  <td> Abstraction ::=&nbsp; </td> <td> $$ \mathtt{\lambda}\ \mathrm{Variable:Type}\ .\ \mathrm{Expression} $$ </td> <td> Abs (Var i Type) Expression </td>
+	</tr>
+	<tr>
+	  <td> IF-Statement ::=&nbsp; </td> <td> $$ \mathtt{if}\ \mathrm{Expression}\ \mathtt{then}\ \mathrm{Expression}\ \mathtt{else}\ \mathrm{Expression} $$</td><td>If Expression Expression Expression</td>
+	</tr>
+	<tr>
+	  <td> Value ::=&nbsp;</td> <td> $$ \mathtt{True}\ |\ \mathtt{False} $$ </td> <td> VTrue | VFalse </td>
+	</tr>
+	<tr>
+	  <td> Application ::=&nbsp;</td><td> $$\mathrm{Expression}\ \mathrm{Expression}$$ </td> <td> App Expression Expression </td>
+	</tr>
+	<tr>
+	  <td> BoolType ::=&nbsp;</td><td> $$\mathtt{B}$$ </td> <td> TBool </td>
+	</tr>
+	<tr>
+	  <td> Arrow ::= </td> <td> $$ \mathrm{Type}\ \to\ \mathrm{Type} $$</td> <td> Arr Type Type </td>
+	</tr>
+      </table>
     <textarea rows="10" cols="200" id="calcInput"></textarea>
     <input type="submit" id="compileInput" value="compile"></input>
     <div id="examplesDiv"></div>
-    <h4>Type</h4>
+    <h4>Annotated Type</h4>
     <div id="typeRenderDiv"></div>
     <h4>Expression</h4>
     <div id="calcRenderDiv"></div>
