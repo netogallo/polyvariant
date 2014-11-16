@@ -80,7 +80,7 @@ reconstructionF s0 = C.foldM alg
       return (t,b0,d0,[(Left $ An.Var psi, b0), (Right $ E.Empty, d0)])
 
     appF i (t1,b1,d1,c1) (t2,b2,d2,c2) = do
-      (At.Arr (At.Ann t2' (An.Var b2')) phi' (At.Ann t' psi')) <- inst t1
+      (At.Arr (At.Ann t2' (An.Var b2')) phi' (At.Ann t' psi')) <- At.normalize <$> inst t1
       d <- getFreshIx $ ASort $ S.Eff
       b <- getFreshIx $ ASort $ S.Ann
       let omega = M.insert b2' (Left $ An.Var b2) $ match M.empty t2 t2'

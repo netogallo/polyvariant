@@ -6,6 +6,7 @@ import qualified Data.Map as M
 import qualified Analysis.Types.Effect as E
 import qualified Analysis.Types.Annotation as A
 import qualified Analysis.Types.Sorts as S
+import Debug.Trace
 
 getChis eff =
   let Just (expr,arg) = E.mApp eff
@@ -30,7 +31,7 @@ getBetas ann =
 
 
 match sigma t1x t2x = do
-  case (t1x,t2x) of
+  case trace (show (t1x,t2x)) (t1x,t2x) of
     (TBool,TBool) -> M.empty
     (Forall v1 t1,Forall v2 t2) | S.sort v1 == S.sort v2 -> match (M.insert (S.name v2) (S.sort v2) sigma) t1 t2
     (Arr t1 phi (Ann t2 psi2), Arr t1' (eff@(E.mApp -> Just (_,_))) (Ann t2' (bs@(A.App _ _)))) | t1 == t1' ->
