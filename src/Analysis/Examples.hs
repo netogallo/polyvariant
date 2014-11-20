@@ -20,4 +20,6 @@ t3 = Abs (C.Var 1 (Arr TBool TBool)) (
 
 t4 = Abs (C.Var 1 (Arr (Arr TBool TBool) TBool)) (If (App (Var 1) (Abs (C.Var 2 TBool) VTrue)) VFalse VTrue)
 
-allExamples = [t0,t1,t2,t3,t4]
+t5 = Fix (Abs (C.Var 1 (Arr TBool TBool)) (Abs (C.Var 2 TBool) (If VFalse (App (Var 1) VTrue) VTrue)))
+
+allExamples = [t0,t1,t2,t3,t4,t4]

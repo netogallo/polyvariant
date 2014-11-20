@@ -34,7 +34,8 @@ initState = C.foldM alg
       fvtrue = sing,
       fabs = \i _ s -> return $ baseAll i C.<+> s,
       fif = \i cond yes no -> return $ baseAll i C.<+> cond C.<+> yes C.<+> no,
-      fapp = \i a1 a2 -> return $ baseAll i C.<+> a1 C.<+> a2
+      fapp = \i a1 a2 -> return $ baseAll i C.<+> a1 C.<+> a2,
+      ffix = \i s -> return $ baseAll i C.<+> s
       }
 
 calcCompletions :: (Functor m, Monad m) => RState -> LambdaCalc T.Type -> StateT RContext m RState
@@ -70,6 +71,7 @@ reconstructionF s0 = C.foldM alg
       fvar = varF,
       fif = iffF,
       fapp = appF,
+      ffix = fixF,
       fabs = absF}
     varF i v = do
       -- The constraint {} c d0 is added artificially so the
@@ -94,7 +96,22 @@ reconstructionF s0 = C.foldM alg
           rPsi psi = An.replaceFree annOmega psi
           rTprime ty = At.replaceFree omega ty
       return (At.normalize $ rTprime t',b,d,c)
-      
+
+    fixF i (t1,b1,d1,c1) = do
+      At.Arr (At.Ann t' b') phi0 (At.Ann t'' psi'') <- At.normalize <$> inst t1
+      d <- getFreshIx $ ASort $ S.Eff
+      b <- getFreshIx $ ASort $ S.Ann
+      let omega1 = match M.empty t'' t'
+          (annOmega1,_) = M.mapEither id omega1
+          omega2 = M.fromList [(b1,Left $ An.replaceFree annOmega1 psi'')]
+          (annOmega2,_) = M.mapEither id omega2
+          c :: [(Either An.Annotation E.Effect, Int)]
+          c = [
+            (Right $ E.Var d1,d), (Right $ E.Flow (show i) (An.Var b1),d),
+            (Right $ E.replaceFree omega2 $ E.replaceFree omega1 phi0, d),
+            (Left $ An.replaceFree annOmega2 $ An.replaceFree annOmega1 psi'', b)
+            ] ++ c1
+      return (At.replaceFree omega2 $ At.replaceFree omega1 t', b, d, c)
 
     boolF i = do
       b0 <- getFreshIx $ ASort S.Ann
