@@ -76,10 +76,12 @@ reconstructionF s0 = C.foldM alg
     varF i v = do
       -- The constraint {} c d0 is added artificially so the
       -- constraint solving algorithm is easier to implement
-      let Just (t,psi) = M.lookup v $ (\(Just x) -> x) $ M.lookup i $ s0 ^. gammas
       b0 <- getFreshIx (ASort S.Ann)
       d0 <- getFreshIx $ ASort S.Eff
-      return (t,b0,d0,[(Left $ An.Var psi, b0), (Right $ E.Empty, d0)])
+      let Just (t,psi) = M.lookup v $ (\(Just x) -> x) $ M.lookup i $ s0 ^. gammas
+          c = [(Left $ An.Var psi, b0), (Right $ E.Empty, d0)]
+      modify (history %~ (BasicLog (t,c,i,b0,d0) :))
+      return (t,b0,d0,c)
 
     appF i (t1,b1,d1,c1) (t2,b2,d2,c2) = do
       (At.Arr (At.Ann t2' (An.Var b2')) phi' (At.Ann t' psi')) <- At.normalize <$> inst t1
