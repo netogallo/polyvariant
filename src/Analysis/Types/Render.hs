@@ -1,5 +1,6 @@
 {-# Language ScopedTypeVariables #-}
 module Analysis.Types.Render where
+import Analysis.Common
 import Text.LaTeX.Packages.AMSMath
 import Text.LaTeX.Base.Texy
 import Text.LaTeX.Base
@@ -17,16 +18,6 @@ import qualified Data.Set as D
 import Data.List
 import qualified Analysis.Types.LambdaCalc as L
 import qualified Analysis.Types.Type as Ty
-
-quad :: LaTeXC l => l
-quad = comm0 ";"
-
-group e = raw (pack "{") <> e <> raw (pack "}")
-
-appL :: LaTeXC l => l
-appL = stexy "*"
-
-xrightarrow l = comm1 "xrightarrow" l
 
 concatWith :: [a] -> [[a]] -> [a]
 concatWith c [] = []
@@ -47,17 +38,6 @@ sexyset n xs' =
       render1 = map (join (&) . map texy) groups
       render2 = unpack $ render $ (join (\a b -> a <> lnbk <> b) render1 :: LaTeX)
   in autoBraces $ raw . pack $ "\\begin{array}{"++dims++"}"++render2++"\\end{array}"
-      
-
-renderFile f = R.renderFile f . mkLatex
-
-mkLatex :: Texy l => l -> LaTeX
-mkLatex l = (documentclass [] minimal) <> usepackage [] amsmath <> document (math $ texy l)
-
-stexy s = texy $ (pack $ s :: Text)
-
-typett :: LaTeXC l => l -> l
-typett = mathtt
 
 renderSort s =
   case s of
@@ -83,7 +63,7 @@ renderAnn ann = runIdentity $ A.foldAnnM alg ann
                            <> renderSort s
                            <> quad <> stexy "." <> quad <> b
     appf _ a1 a2 = return $ a1 <> appL <> a2
-    labelf _ l = return $ textbf $ stexy $ "@" ++ l
+    labelf _ l = return $ renderLbl l
     unionf :: LaTeXC l => Int -> l -> l -> Identity l
     unionf i _ _ =
       let A.Set s = C.unions $ (\(Just x) -> x) $ C.byId i ann
@@ -197,8 +177,3 @@ instance Texy E.Effect where
 
 instance Texy At.Type where
   texy = renderAnnType
-
-instance Texy e => Texy (D.Set e) where
-  texy s
-    | D.null s = autoBraces $ stexy ""
-    | otherwise = autoBraces $ D.fold (\e s -> texy e <> stexy ";" <> quad <> s) (texy $ D.elemAt 0 s) $ D.deleteAt 0 s
