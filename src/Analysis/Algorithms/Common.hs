@@ -1,4 +1,4 @@
-{-# Language TemplateHaskell #-}
+{-# Language TemplateHaskell, CPP #-}
 module Analysis.Algorithms.Common where
 import Analysis.Common
 import Control.Applicative
@@ -18,6 +18,16 @@ import Text.LaTeX.Base
 import Text.LaTeX.Base.Class
 
 data FreshVar = B0 | B1 | D0 deriving (Show,Eq,Ord)
+
+data Failure a = Failure Int a
+
+data FailureContents a b c d =
+  C1 a
+  | C2 b
+  | C3 c
+  | C4 d
+
+type RFailure = Failure [FailureContents String A.Annotation E.Effect AT.Type]
 
 data SortConstraint =
   AnyEffect
@@ -47,6 +57,14 @@ data LogEntry =
   -- | Base results, I(tau1), Omega1, Omega2
   | FixLog LogResult AT.Type (M.Map Int (Either A.Annotation E.Effect)) (M.Map Int (Either A.Annotation E.Effect))
   deriving Show
+
+logLabel e =
+  let getLabel (_,_,l,_,_) = l
+  in case e of
+    BasicLog l -> getLabel l
+    AbstLog l _ _ _ _ _ -> getLabel l
+    AppLog l _ _ -> getLabel l
+    FixLog l _ _ _-> getLabel l
 
 renderBase (t,cs,l,b,d) =
   let
@@ -93,12 +111,17 @@ renderLog l =
             (theta !: stexy "1",texy rep1),
             (theta !: stexy "2",texy rep2)
           ]
-    mkTableRow s (e,v) = e Text.LaTeX.Base.& v <> lnbk <> s
-  in tabular Nothing [CenterColumn,CenterColumn] (foldl mkTableRow mempty rows)
-          
+  in rows
+
+#ifdef COMPGHC
 
 instance Texy LogEntry where
-  texy = texy . renderLog
+  texy e =
+    let rows = renderLog e :: [LaTeX]
+        mkTableRow s (e,v) = e Text.LaTeX.Base.& v <> lnbk <> s
+    in tabular Nothing [CenterColumn,CenterColumn] (foldl mkTableRow mempty rows)
+
+#endif    
 
 data RContext = RContext{
   _freshIx :: Int,
@@ -107,8 +130,6 @@ data RContext = RContext{
  }
 
 rcontext = RContext (-1) M.empty []
-
-makeLenses ''RContext
 
 data RState = RState{
   _freshFlowVars :: M.Map Int (M.Map FreshVar Int),
@@ -119,7 +140,58 @@ data RState = RState{
 instance Show RState where
   show s = show $ _freshFlowVars s
 
-makeLenses ''RState
+-- makeLenses ''RContext
+-- makeLenses ''RState
+
+freshIx :: Lens' RContext Int
+freshIx
+      _f_a163Q
+      (RContext __freshIx'_a163R __fvGammas_a163T __history_a163U)
+      = ((\ __freshIx_a163S
+            -> RContext __freshIx_a163S __fvGammas_a163T __history_a163U)
+         <$> (_f_a163Q __freshIx'_a163R))
+{-# INLINE freshIx #-}
+fvGammas :: Lens' RContext (M.Map Int SortConstraint)
+fvGammas
+      _f_a163V
+      (RContext __freshIx_a163W __fvGammas'_a163X __history_a163Z)
+      = ((\ __fvGammas_a163Y
+            -> RContext __freshIx_a163W __fvGammas_a163Y __history_a163Z)
+         <$> (_f_a163V __fvGammas'_a163X))
+{-# INLINE fvGammas #-}
+history :: Lens' RContext [LogEntry]
+history
+      _f_a1640
+      (RContext __freshIx_a1641 __fvGammas_a1642 __history'_a1643)
+      = ((\ __history_a1644
+            -> RContext __freshIx_a1641 __fvGammas_a1642 __history_a1644)
+         <$> (_f_a1640 __history'_a1643))
+{-# INLINE history #-}
+
+completions :: Lens' RState (M.Map Int (AT.Type, [S.FlowVariable]))
+completions
+      _f_a166O
+      (RState __freshFlowVars_a166P __completions'_a166Q __gammas_a166S)
+      = ((\ __completions_a166R
+            -> RState __freshFlowVars_a166P __completions_a166R __gammas_a166S)
+         <$> (_f_a166O __completions'_a166Q))
+{-# INLINE completions #-}
+freshFlowVars :: Lens' RState (M.Map Int (M.Map FreshVar Int))
+freshFlowVars
+      _f_a166T
+      (RState __freshFlowVars'_a166U __completions_a166W __gammas_a166X)
+      = ((\ __freshFlowVars_a166V
+            -> RState __freshFlowVars_a166V __completions_a166W __gammas_a166X)
+         <$> (_f_a166T __freshFlowVars'_a166U))
+{-# INLINE freshFlowVars #-}
+gammas :: Lens' RState (M.Map Int (M.Map Int (AT.Type, Int)))
+gammas
+      _f_a166Y
+      (RState __freshFlowVars_a166Z __completions_a1670 __gammas'_a1671)
+      = ((\ __gammas_a1672
+            -> RState __freshFlowVars_a166Z __completions_a1670 __gammas_a1672)
+         <$> (_f_a166Y __gammas'_a1671))
+{-# INLINE gammas #-}
 
 instance CT.Group RState where
   void = RState M.empty M.empty M.empty
@@ -130,7 +202,7 @@ instance CT.Group RState where
       _gammas = M.unionWith M.union (_gammas sa) (_gammas sb)
       }
 
-getFreshIx :: (Functor m, Monad m) => SortConstraint -> StateT RContext m Int
+-- getFreshIx :: (Functor m, Monad m) => SortConstraint -> StateT RContext m Int
 getFreshIx sort = do
   i <- (^.freshIx) <$> get
   modify (freshIx -~ (1))

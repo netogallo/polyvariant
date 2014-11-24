@@ -25,6 +25,7 @@ import GHCJS.DOM.Element (elementOnclick)
 import Analysis.Types.LambdaCalc
 import qualified Analysis.Types.Type as Ty
 import Analysis.Types.Render
+import Analysis.Algorithms.Common
 import Analysis.Algorithms.Reconstruction (reconstruction)
 import qualified Data.Text as T
 import Text.LaTeX.Base.Texy
@@ -66,6 +67,8 @@ compileName = "compileInput"
 
 examplesName = "examplesDiv"
 
+logName = "logDiv"
+
 examplesDiv = fmap castToHTMLDivElement . pageElement examplesName
 
 compileInput = fmap castToHTMLInputElement . pageElement compileName
@@ -75,6 +78,8 @@ calcInput = fmap castToHTMLTextAreaElement . pageElement calcInputName
 calcRender = fmap castToHTMLDivElement . pageElement calcRenderName
 
 typeRender = fmap castToHTMLDivElement . pageElement typeRenderName
+
+logDiv = fmap castToHTMLDivElement . pageElement logName
 
 addExample webUi ex = do
   (Just doc) <- currentDocument
@@ -89,13 +94,31 @@ addExample webUi ex = do
   _ <- nodeAppendChild exDiv (Just e')
   return ()
 
+entryDivId i = "logEntry_" ++ show i
+
+createEntryDiv i = do
+  (Just doc) <- currentDocument
+  (Just e) <- documentCreateElement doc ("div" :: String)
+  elementSetAttribute e ("id" :: String) (entryDivId i)
+  return e
+
+renderEntry e = do
+  entry <- createEntryDiv $ logLabel e
+  htmlElementSetInnerHTML (castToHTMLDivElement entry) $ T.unpack $ T.concat ["$$",R.render $ (texy e :: LaTeX), "$$"]
+  return entry
+
 compile webUi = do
   calc <- (\e -> read $ trace (show t1) e) <$> (calcInput webUi >>= htmlTextAreaElementGetValue)
   calcDiv <- calcRender webUi
   typeDiv <- typeRender webUi
-  let (ty,_,_,_) = reconstruction calc
-  htmlElementSetInnerHTML calcDiv $ T.unpack $ T.concat ["$$",R.render $ (texy calc :: LaTeX),"$$"]
-  htmlElementSetInnerHTML typeDiv $ T.unpack $ T.concat ["$$",R.render $ (texy ty :: LaTeX),"$$"]
+  log <- logDiv webUi
+  let result = reconstruction calc
+  case result of
+    (Right (ty,_,_,_),ctx) -> do
+      htmlElementSetInnerHTML calcDiv $ T.unpack $ T.concat ["$$",R.render $ (texy calc :: LaTeX),"$$"]
+      htmlElementSetInnerHTML typeDiv $ T.unpack $ T.concat ["$$",R.render $ (texy ty :: LaTeX),"$$"]
+      mapM_ (\e -> renderEntry e >>= nodeAppendChild log . Just >> return ()) $ _history ctx
+    _ -> return ()
   reRender
 
 webMain = runWebGUI $ \webUi -> do

@@ -20,6 +20,7 @@ import Data.Maybe
 import Control.Lens
 import Control.Applicative
 import qualified Data.Set as D
+import Control.Monad.Except
 
 -- calcCompletions :: (Functor m, Monad m) => LambdaCalc T.Type -> StateT RContext m (LambdaCalc T.Type)
 initState :: (Functor m, Monad m) => LambdaCalc T.Type -> m RState
@@ -38,7 +39,7 @@ initState = C.foldM alg
       ffix = \i s -> return $ baseAll i C.<+> s
       }
 
-calcCompletions :: (Functor m, Monad m) => RState -> LambdaCalc T.Type -> StateT RContext m RState
+-- calcCompletions :: (Functor m, Monad m) => RState -> LambdaCalc T.Type -> StateT RContext m RState
 calcCompletions s0 = C.foldM alg
   where
     abs i v t = do
@@ -60,8 +61,8 @@ calcGammas s0 = C.foldM alg
              $ s
     alg = (groupAlgebraInit s0){fabs=abs,fvar=var}          
 
-reconstructionF :: (C.Fold a (Algebra T.Type), Functor m, Monad m) =>
-                   RState -> a -> StateT RContext m (At.Type, Int, Int, [(Either An.Annotation E.Effect, Int)])
+reconstructionF :: (MonadError RFailure m, MonadState RContext m, C.Fold a (Algebra T.Type), Functor m, Monad m, Applicative m) =>
+                   RState -> a -> m (At.Type, Int, Int, [(Either An.Annotation E.Effect, Int)])
 reconstructionF s0 = C.foldM alg
   
   where
@@ -82,12 +83,13 @@ reconstructionF s0 = C.foldM alg
           c = [(Left $ An.Var psi, b0), (Right $ E.Empty, d0)]
       modify (history %~ (BasicLog (t,c,i,b0,d0) :))
       return (t,b0,d0,c)
-
+    
     appF i (t1,b1,d1,c1) (t2,b2,d2,c2) = do
-      (At.Arr (At.Ann t2' (An.Var b2')) phi' (At.Ann t' psi')) <- At.normalize <$> inst t1
+      t1'@(At.Arr (At.Ann t2' (An.Var b2')) phi' (At.Ann t' psi')) <- At.normalize <$> inst t1
       d <- getFreshIx $ ASort $ S.Eff
       b <- getFreshIx $ ASort $ S.Ann
-      let omega = M.insert b2' (Left $ An.Var b2) $ match M.empty t2 t2'
+      omega <- M.insert b2' (Left $ An.Var b2) <$> match i M.empty t2 t2'
+      let
           (annOmega,_) = M.mapEither id omega
           c = [
             (Right $ E.Var d1,d),(Right $ E.Var d2,d),(Right $ E.Flow (show i) (An.Var b1),d),
@@ -97,13 +99,16 @@ reconstructionF s0 = C.foldM alg
           rPhi phi = E.replaceFree omega phi
           rPsi psi = An.replaceFree annOmega psi
           rTprime ty = At.replaceFree omega ty
-      return (At.normalize $ rTprime t',b,d,c)
+          t = At.normalize $ rTprime t'
+      modify (history %~ (AppLog (t,c,i,b,d) t1' omega :))
+      return (t,b,d,c) 
 
     fixF i (t1,b1,d1,c1) = do
-      At.Arr (At.Ann t' b') phi0 (At.Ann t'' psi'') <- At.normalize <$> inst t1
+      t1'@(At.Arr (At.Ann t' b') phi0 (At.Ann t'' psi'')) <- At.normalize <$> inst t1
       d <- getFreshIx $ ASort $ S.Eff
       b <- getFreshIx $ ASort $ S.Ann
-      let omega1 = match M.empty t'' t'
+      omega1 <- match i M.empty t'' t'
+      let
           (annOmega1,_) = M.mapEither id omega1
           omega2 = M.fromList [(b1,Left $ An.replaceFree annOmega1 psi'')]
           (annOmega2,_) = M.mapEither id omega2
@@ -113,16 +118,20 @@ reconstructionF s0 = C.foldM alg
             (Right $ E.replaceFree omega2 $ E.replaceFree omega1 phi0, d),
             (Left $ An.replaceFree annOmega2 $ An.replaceFree annOmega1 psi'', b)
             ] ++ c1
-      return (At.replaceFree omega2 $ At.replaceFree omega1 t', b, d, c)
+          t = At.replaceFree omega2 $ At.replaceFree omega1 t'
+      modify (history %~ (FixLog (t,c,i,b,d) t1' omega1 omega2 :))
+      return (t, b, d, c)
 
     boolF i = do
       b0 <- getFreshIx $ ASort S.Ann
       d0 <- getFreshIx $ ASort S.Eff
-      return (At.TBool,b0,d0,[(Left $ An.Label (show i), b0), (Right $ E.Empty, d0)])
+      let c = [(Left $ An.Label (show i), b0), (Right $ E.Empty, d0)]
+      modify (history %~ (BasicLog (At.TBool,c,i,b0,d0) :))
+      return (At.TBool,b0,d0,c)
 
     iffF i (_,b1,d1,c1) (t2,b2,d2,c2) (t3,b3,d3,c3) = do
       fvG <- use fvGammas
-      let t = joinTypes t2 t3
+      let t = At.normalize $ joinTypes t2 t3
           bSort = case filter isJust $ map (\v -> M.lookup v fvG) [b2,b3] of
             [] -> AnyAnnotation
             (Just s1):(Just s2):_ | s1 == s2 -> s1
@@ -135,9 +144,10 @@ reconstructionF s0 = C.foldM alg
       let c0 = [(Right $ E.Var d1,d0),(Right $ E.Flow (show i) $ An.Var b1,d0),
             (Right $ E.Var d2,d0),(Right$ E.Var d3,d0),
             (Left $ An.Var b2,b0),(Left $ An.Var b3,b0)] ++ c1 ++ c2 ++ c3
-      return $ (At.normalize t,b0,d0,c0)
+      modify (history %~ (BasicLog (t,c0,i,b0,d0) :))
+      return $ (t,b0,d0,c0)
 
-    absF :: (Functor m, Monad m) => Int -> (C.Variable T.Type) -> (At.Type,Int,Int,[(Either An.Annotation E.Effect,Int)]) -> StateT RContext m (At.Type,Int,Int,[(Either An.Annotation E.Effect,Int)])
+--    absF :: (Functor m, Monad m) => Int -> (C.Variable T.Type) -> (At.Type,Int,Int,[(Either An.Annotation E.Effect,Int)]) -> StateT RContext m (At.Type,Int,Int,[(Either An.Annotation E.Effect,Int)])
     absF i var (t2,b2,d0,c1) = do
       let Just b1 = (M.lookup B1) . (\(Just x) -> x) . M.lookup i $ s0 ^. freshFlowVars
           (t1,xis) = (\(Just x) -> x) . M.lookup i $ s0 ^. completions
@@ -146,15 +156,19 @@ reconstructionF s0 = C.foldM alg
           x = D.fromList $ [b1] ++ map S.name xis ++ ffv
           solver c x b d = solve c x b d
       (psi1,phi0) <- solver c1 (D.toList x) b2 d0
-      let t' = At.Arr (At.Ann t1 (An.Var b1)) phi0 (At.Ann t2 psi1)
-          t = At.Forall (S.Var b1 S.Ann) $ foldr (\v t -> At.Forall v t) t' xis
       b0 <- getFreshIx $ ASort S.Ann
       d0 <- getFreshIx $ ASort S.Eff
-      return (At.normalize t,b0,d0,[(Left $ An.Label $ show i,b0), (Right $ E.Empty, d0)])
+      let t' = At.Arr (At.Ann t1 (An.Var b1)) phi0 (At.Ann t2 psi1)
+          t = At.normalize $ At.Forall (S.Var b1 S.Ann) $ foldr (\v t -> At.Forall v t) t' xis
+          c = [(Left $ An.Label $ show i,b0), (Right $ E.Empty, d0)]
+          xis' = map (\v -> (S.name v, S.sort v)) xis
+          x' = [(b1,S.Ann)] ++ xis' ++ map (\n -> (n,S.Ann)) ffv
+      modify (history %~ (AbstLog (t,c,i,b0,d0) t1 xis' x' psi1 phi0 :))
+      return (t,b0,d0,c)
       
-reconstruction t = flip evalState rcontext $ do
-  s0 <- lift (initState t)
-  s1 <- calcCompletions s0 t
+reconstruction t = runIdentity $ flip runStateT rcontext $ runExceptT $ do
+  s0 <- (initState t)
+  s1 <- lift $ calcCompletions s0 t
   s2 <- calcGammas s1 t
   reconstructionF s2 t
   
