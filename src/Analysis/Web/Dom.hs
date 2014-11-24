@@ -19,7 +19,9 @@ import GHCJS.DOM.Types(
   Node(..),
   castToHTMLElement,
   castToHTMLDivElement,
-  castToHTMLInputElement)
+  castToHTMLInputElement,
+  castToHTMLHeadingElement,
+  castToHTMLTableCellElement)
 import GHCJS.DOM.HTMLInputElement (htmlInputElementGetValue)
 import GHCJS.DOM.Element (elementOnclick)
 import Analysis.Types.LambdaCalc
@@ -67,7 +69,9 @@ compileName = "compileInput"
 
 examplesName = "examplesDiv"
 
-logName = "logDiv"
+logName1 = "logDiv1"
+
+logName2 = "logDiv2"
 
 examplesDiv = fmap castToHTMLDivElement . pageElement examplesName
 
@@ -79,7 +83,7 @@ calcRender = fmap castToHTMLDivElement . pageElement calcRenderName
 
 typeRender = fmap castToHTMLDivElement . pageElement typeRenderName
 
-logDiv = fmap castToHTMLDivElement . pageElement logName
+logDivs ui = mapM (\e -> fmap castToHTMLDivElement $ pageElement e ui) [logName1,logName2]
 
 addExample webUi ex = do
   (Just doc) <- currentDocument
@@ -102,22 +106,52 @@ createEntryDiv i = do
   elementSetAttribute e ("id" :: String) (entryDivId i)
   return e
 
+createElement e = do
+  (Just doc) <- currentDocument
+  (Just e') <- documentCreateElement doc (e :: String)
+  return e'
+
 renderEntry e = do
   entry <- createEntryDiv $ logLabel e
-  htmlElementSetInnerHTML (castToHTMLDivElement entry) $ T.unpack $ T.concat ["$$",R.render $ (texy e :: LaTeX), "$$"]
+  tbl <- createElement "table"
+  h <- createElement "h4"
+  elementSetAttribute tbl ("border" :: String) ("1" :: String)
+  htmlElementSetInnerHTML (castToHTMLHeadingElement h) $ "Label @" ++ show (logLabel e)
+  let cssClass = if logLabel e `mod` 2 == 0 then "logEven" else "logOdd"
+  elementSetAttribute entry ("class" :: String) (cssClass :: String)
+  nodeAppendChild entry (Just h)
+  nodeAppendChild entry (Just tbl)
+  let es = renderLog e
+  mapM_ (\x -> renderRow x >>= nodeAppendChild tbl . Just >> return ()) es
   return entry
+  where
+    renderRow (e1,e2) = do
+      r <- createElement "tr"
+      c1 <- createElement "td"
+      c2 <- createElement "td"
+      let addContent e v = do
+            htmlElementSetInnerHTML (castToHTMLTableCellElement e) $ T.unpack $ T.concat ["$$",render $ (texy v :: LaTeX),"$$"]
+            nodeAppendChild r (Just e)
+      addContent c1 e1
+      addContent c2 e2
+      return r
 
 compile webUi = do
   calc <- (\e -> read $ trace (show t1) e) <$> (calcInput webUi >>= htmlTextAreaElementGetValue)
   calcDiv <- calcRender webUi
   typeDiv <- typeRender webUi
-  log <- logDiv webUi
+  logs <- logDivs webUi
   let result = reconstruction calc
   case result of
     (Right (ty,_,_,_),ctx) -> do
       htmlElementSetInnerHTML calcDiv $ T.unpack $ T.concat ["$$",R.render $ (texy calc :: LaTeX),"$$"]
       htmlElementSetInnerHTML typeDiv $ T.unpack $ T.concat ["$$",R.render $ (texy ty :: LaTeX),"$$"]
-      mapM_ (\e -> renderEntry e >>= nodeAppendChild log . Just >> return ()) $ _history ctx
+      mapM_ (flip htmlElementSetInnerHTML ("" :: String)) logs
+      mapM_ (\e -> do
+                el <- renderEntry e
+                mapM_ (\l -> renderEntry e >>= nodeAppendChild l . Just) logs
+--                navButton e logs
+                return ()) $ _history ctx
     _ -> return ()
   reRender
 

@@ -5,8 +5,12 @@
     <script language="javascript" src="rts.js"></script>
     <script language="javascript" src="lib1.js"></script>
     <script language="javascript" src="out.js"></script>
+    <script src="//code.jquery.com/jquery-1.11.0.min.js"></script>
     <script type="text/x-mathjax-config;executed=true">
-      MathJax.Hub.Config({tex2jax: {inlineMath: [['$','$'], ['\\(','\\)']]}});
+      MathJax.Hub.Config({
+      tex2jax: {inlineMath: [['$','$'], ['\\(','\\)']]}
+      HTML-CSS: { linebreaks: { automatic: true } };
+      });
     </script>
     <script src="http://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML" type="text/javascript">
     </script>
@@ -57,7 +61,28 @@
     <h4>Expression</h4>
     <div id="calcRenderDiv"></div>
     <h4>Log</h4>
-    <div id="logDiv"></div>
+    <div id="log1">
+      <div class="logNav" style="float:left">
+	<div id="logDiv1" class="loggin"></div>
+      </div>
+      <div id="log2" class="logNav" style="float:right">
+	<div id="logDiv2" class="loggin"></div>
+      </div>
+
+    <style type="text/css">
+      .logEven h4{
+      background-color: #f0f0f0;
+      }
+      .logOdd h4{
+      background-color: #bfbfbf;
+      }
+      .logNav{
+        overflow-y: scroll;
+        height: 500px;
+        width: 50%;
+        overflow-x: scroll;
+      }
+    </style>
   </body>
   <script language="javascript">
     h$main(h$mainZCMainzimain);

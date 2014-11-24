@@ -150,6 +150,7 @@ renderLambdaCalc expr = runIdentity $ L.foldLambdaCalcM alg expr
       <> quad <> mathbf (stexy "then") <> quad <> yes
       <> quad <> mathbf (stexy "else") <> quad <> no
     appF i a1 a2 = return $ label i $ a1 <> appL <> a2
+    fixF i a1 = return $ mathbf (stexy "fix") <> quad <> a1
     alg :: (LaTeXC l,Texy t) => L.Algebra t Identity (L.LambdaCalc t) l
     alg = L.Algebra{
       L.fvar = varF,
@@ -157,7 +158,8 @@ renderLambdaCalc expr = runIdentity $ L.foldLambdaCalcM alg expr
       L.fvtrue = vtrueF,
       L.fabs = absF,
       L.fif = ifF,
-      L.fapp = appF
+      L.fapp = appF,
+      L.ffix = fixF
       }
 
 instance Texy Ty.Type where
