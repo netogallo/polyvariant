@@ -108,6 +108,7 @@ renderEff elm = runIdentity $ E.foldEffectM alg elm
 renderAnnType :: LaTeXC l => At.Type -> l
 renderAnnType = runIdentity . At.foldTypeM alg
   where
+    tvarf _ v = return $ tau ^: texy v
     tboolf _ = return $ (typett $ texy $ pack "B")
     forallf _ fv t =
       let v | S.annSort $ S.sort fv = beta ^: (texy $ S.name fv)

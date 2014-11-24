@@ -21,13 +21,14 @@ data FreshVar = B0 | B1 | D0 deriving (Show,Eq,Ord)
 
 data Failure a = Failure Int a
 
-data FailureContents a b c d =
+data FailureContents a b c d e =
   C1 a
   | C2 b
   | C3 c
   | C4 d
+  | C5 e
 
-type RFailure = Failure [FailureContents String A.Annotation E.Effect AT.Type]
+type RFailure = Failure [FailureContents String A.Annotation E.Effect AT.Type S.Sort]
 
 data SortConstraint =
   AnyEffect

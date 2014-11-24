@@ -79,13 +79,25 @@ reconstructionF s0 = C.foldM alg
       -- constraint solving algorithm is easier to implement
       b0 <- getFreshIx (ASort S.Ann)
       d0 <- getFreshIx $ ASort S.Eff
+      -- Pattern match fails if either:
+      -- No variable mappings exist for this particular branch
+      -- A free variable is queried which is not in the environment
+      -- Neither should ever happen
       let Just (t,psi) = M.lookup v $ (\(Just x) -> x) $ M.lookup i $ s0 ^. gammas
           c = [(Left $ An.Var psi, b0), (Right $ E.Empty, d0)]
       modify (history %~ (BasicLog (t,c,i,b0,d0) :))
       return (t,b0,d0,c)
     
     appF i (t1,b1,d1,c1) (t2,b2,d2,c2) = do
-      t1'@(At.Arr (At.Ann t2' (An.Var b2')) phi' (At.Ann t' psi')) <- At.normalize <$> inst t1
+      tx <- At.normalize <$> inst t1
+      t1'@(At.Arr (At.Ann t2' (An.Var b2')) phi' (At.Ann t' psi')) <- case tx of
+            tx'@(At.Arr (At.Ann _ (An.Var _)) _ (At.Ann _ _)) -> return tx'
+            _ -> throwError $ Failure i [
+              C1 "The type ",
+              C4 tx,
+              C1 " resulting from the I algorithm",
+              C1 " does not have the expected structure ",
+              C4 (At.Arr (At.Ann (At.Var 2) (An.Var 2)) (E.Var 1) (At.Ann (At.Var 1) (An.Var 1)))]
       d <- getFreshIx $ ASort $ S.Eff
       b <- getFreshIx $ ASort $ S.Ann
       omega <- M.insert b2' (Left $ An.Var b2) <$> match i M.empty t2 t2'
@@ -132,11 +144,15 @@ reconstructionF s0 = C.foldM alg
     iffF i (_,b1,d1,c1) (t2,b2,d2,c2) (t3,b3,d3,c3) = do
       fvG <- use fvGammas
       let t = At.normalize $ joinTypes t2 t3
-          bSort = case filter isJust $ map (\v -> M.lookup v fvG) [b2,b3] of
-            [] -> AnyAnnotation
-            (Just s1):(Just s2):_ | s1 == s2 -> s1
-            (Just s1):[] -> s1
-            s1:s2:_ -> error $ "Inconsistent sorts: " ++ show s1 ++ " and " ++ show s2
+      bSort <- case filter isJust $ map (\v -> M.lookup v fvG) [b2,b3] of
+            [] -> return AnyAnnotation
+            (Just s1):(Just s2):_ | s1 == s2 -> return s1
+            (Just s1):[] -> return s1
+            s1:s2:_ -> throwError $ Failure i [
+              C1 "Inconsistent sorts in the if-statement: ",
+              C5 s1,
+              C1 " and ",
+              C5 s2]
       updateSort b1 $ ASort S.Ann
       b0 <- getFreshIx bSort
       d0 <- getFreshIx $ ASort S.Eff
@@ -147,7 +163,6 @@ reconstructionF s0 = C.foldM alg
       modify (history %~ (BasicLog (t,c0,i,b0,d0) :))
       return $ (t,b0,d0,c0)
 
---    absF :: (Functor m, Monad m) => Int -> (C.Variable T.Type) -> (At.Type,Int,Int,[(Either An.Annotation E.Effect,Int)]) -> StateT RContext m (At.Type,Int,Int,[(Either An.Annotation E.Effect,Int)])
     absF i var (t2,b2,d0,c1) = do
       let Just b1 = (M.lookup B1) . (\(Just x) -> x) . M.lookup i $ s0 ^. freshFlowVars
           (t1,xis) = (\(Just x) -> x) . M.lookup i $ s0 ^. completions

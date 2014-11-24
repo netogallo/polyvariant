@@ -12,10 +12,16 @@ import Control.Applicative
 import qualified Data.Set as D
 
 data Type =
+  -- | Type constructor for boolean
   TBool
+  -- | Type constructor for arrow types
   | Arr Type E.Effect Type
+  -- | Type Constructor to add an annotation to a type
   | Ann Type A.Annotation
+  -- | Constructor for quantification over annotation or effect variables
   | Forall S.FlowVariable Type
+  -- | Not supported. Only used for nicer error messages
+  | Var Int
   deriving (Show,Read,Eq,Ord)
 
 instance C.Fold Type Algebra where    
@@ -26,7 +32,8 @@ instance C.Fold Type Algebra where
       ftbool = \_ -> return C.void,
       fforall = \_ _ s -> return s,
       fann = \_ s _ -> return s,
-      farr = \_ s1 _ s2 -> return $ s1 C.<+> s2
+      farr = \_ s1 _ s2 -> return $ s1 C.<+> s2,
+      fvar = \_ i -> return C.void
       }
   byId i e = runIdentity $ execStateT (C.foldM alg e) Nothing
     where
@@ -54,7 +61,8 @@ data Algebra m t a =
     farr :: Int -> a -> E.Effect -> a -> m a,
     fann :: Int -> a -> A.Annotation -> m a,
     fforall :: Int -> S.FlowVariable -> a -> m a,
-    ftbool :: Int -> m a
+    ftbool :: Int -> m a,
+    fvar :: Int -> Int -> m a
     }
 
 algebra :: Monad m => Algebra m t Type
@@ -62,7 +70,8 @@ algebra = Algebra{
   farr = \_ a1 eff a2 -> return $ Arr a1 eff a2,
   fann = \_ a1 ann -> return $ Ann a1 ann,
   fforall = \_ v a1 -> return $ Forall v a1,
-  ftbool = \_ -> return TBool
+  ftbool = \_ -> return TBool,
+  fvar = \_ i -> return $ Var i
   }
 
 foldTypeM :: Monad m => Algebra m Type a -> Type -> m a
@@ -73,6 +82,7 @@ foldTypeM f@Algebra{..} a0 = evalStateT (foldTypeM' undefined a0) 0
       put (i+1)
       case a of
         TBool -> lift $ ftbool i
+        Var v -> lift $ fvar i v
         Ann t1 ann -> do
           t1' <- foldTypeM' s t1
           lift $ fann i t1' ann
@@ -89,7 +99,8 @@ depths = runIdentity . (C.foldM alg)
       farr = \i d1 _ d2 -> return $ M.insert i 0 $ M.union d1 d2,
       fann = \i d _ -> return $ M.insert i 0 d,
       fforall = \i _ d1 -> return $ M.insert i 0 $ M.map (+(1 :: Int)) d1,
-      ftbool = \_ -> return M.empty
+      ftbool = \_ -> return M.empty,
+      fvar = \_ _ -> return M.empty
       }
 
 renameByLambdasOffset base'' offset obj = calcReplacements >>= mkReplacements
