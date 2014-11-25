@@ -19,6 +19,9 @@ completion' cont T.TBool _ = cont (A.TBool, [], [])
 completion' cont (T.Arr t1 t2) c0 = completion' cont' t1 [] >>= cont
   where
     mkVar v = do
+      -- Pattern match failure ocurrs if an inexistent variable
+      -- is looked up in the environment. The implementation
+      -- of the algorithm should not allow this to happen
       s <- (\(Just x) -> x) . M.lookup v <$> use fvGammas
       if isAnnConstraint s
         then return $ Left $ An.Var v

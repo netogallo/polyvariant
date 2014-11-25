@@ -1,4 +1,4 @@
-{-# Language TemplateHaskell, CPP #-}
+{-# Language TemplateHaskell, CPP, TypeSynonymInstances, FlexibleInstances #-}
 module Analysis.Algorithms.Common where
 import Analysis.Common
 import Control.Applicative
@@ -28,7 +28,35 @@ data FailureContents a b c d e =
   | C4 d
   | C5 e
 
-type RFailure = Failure [FailureContents String A.Annotation E.Effect AT.Type S.Sort]
+type FailureElement = FailureContents String A.Annotation E.Effect AT.Type SortConstraint
+type RFailure = Failure [FailureElement]
+
+class FailureMessage a where
+  toMsg :: a -> FailureElement
+
+instance FailureMessage String where
+  toMsg = C1
+
+instance FailureMessage A.Annotation where
+  toMsg = C2
+
+instance FailureMessage E.Effect where
+  toMsg = C3
+
+instance FailureMessage AT.Type where
+  toMsg = C4
+
+instance FailureMessage S.Sort where
+  toMsg = C5 . ASort
+
+instance FailureMessage SortConstraint where
+  toMsg = C5
+
+instance FailureMessage (Either A.Annotation E.Effect) where
+  toMsg v =
+    case v of
+      Left a -> C2 a
+      Right eff -> C3 eff
 
 data SortConstraint =
   AnyEffect

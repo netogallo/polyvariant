@@ -1,3 +1,4 @@
+{-# Language FlexibleContexts #-}
 module Analysis.Algorithms.Solve where
 
 import Control.Lens
@@ -12,8 +13,7 @@ import Data.Maybe
 import qualified Data.Set as D
 import Control.Monad
 import Control.Monad.State
-
-import Debug.Trace
+import Control.Monad.Except
 
 emptyG s' = evalState (go s') 1
   where
@@ -34,26 +34,31 @@ emptyTerm s' =
     AnyAnnotation -> Left C.emptyC
     AnyEffect -> Right C.emptyC
 
-solveIt :: M.Map Int (D.Set (Either A.Annotation E.Effect, Int)) -> State (D.Set (Either A.Annotation E.Effect, Int), M.Map Int (Either A.Annotation E.Effect)) ()
-solveIt deps = do
+solveIt :: (MonadError RFailure m, MonadState RContext m) =>
+           Int ->
+           M.Map Int (D.Set (Either A.Annotation E.Effect, Int)) ->
+           StateT (D.Set (Either A.Annotation E.Effect, Int), M.Map Int (Either A.Annotation E.Effect)) m ()
+solveIt l deps = do
   (worklist,analysis) <- get
   unless (D.size worklist == 0) $ do
     let (e',x) = D.elemAt 0 worklist
     e <- lookupExpr e'
     let (e1,e2) = (e,(\(Just w_1919) -> w_1919) $ M.lookup x analysis)
-    let (analysis', isSubset) = case (e1,e2) of
+    (analysis', isSubset) <- case (e1,e2) of
           (Left a1, Left a2) | A.normalize (A.Union a1 a2) /= A.normalize a2 ->
-            (M.insert x (Left $ A.Union a1 a2) analysis, False)
-          (Left _, Left _) -> (analysis, True)
+            return (M.insert x (Left $ A.Union a1 a2) analysis, False)
+          (Left _, Left _) -> return (analysis, True)
           (Right e1, Right e2) | E.normalize (E.Union e1 e2) /= E.normalize e2 ->
-            (M.insert x (Right $ E.Union e1 e2) analysis, False)
-          (Right _, Right _) -> (analysis, True)
-          (a,b) -> error $ "Inconsistent annotations and effect mix: '" ++ show a ++ "' and '" ++ show b ++ "'"
+            return (M.insert x (Right $ E.Union e1 e2) analysis, False)
+          (Right _, Right _) -> return (analysis, True)
+          (a,b) -> lift $ throwError $ Failure l [
+            toMsg "Inconsistent annotations and effect mix: ",
+            toMsg a, toMsg " and ", toMsg b]
     let worklist' = if isSubset
                     then D.deleteAt 0 worklist
                     else D.unions [D.deleteAt 0 worklist,fromMaybe D.empty $ M.lookup x deps]
     put (worklist',analysis')
-    solveIt deps
+    solveIt l deps
   where
     lookupExpr e = do
       analysis <- use _2
@@ -62,18 +67,9 @@ solveIt deps = do
         Left ann -> Left $ A.replaceFree annAnalysis ann
         Right eff -> Right $ E.replaceFree analysis eff
 
-        -- Left (A.Var x) -> (\(Just w_1919) -> w_1919) $ M.lookup x analysis
-        -- Left ex -> Left ex
-        -- Right (E.Var x) -> (\(Just w_1919) -> w_1919) $ M.lookup x analysis
-        -- Right (E.Flow l (A.Var x)) ->
-        --   case (\(Just w_1919) -> w_1919) $ M.lookup x analysis of
-        --     (Left v) -> Right $ E.Flow l v
-        --     (Right e) -> error $ "Variable " ++ show x
-        --                  ++ " was expected to be an annotation. Found effect"
-        -- Right ex -> Right ex
-
 -- solve :: (Functor m, Monad m) => [(Either A.Annotation E.Effect, Int)] -> [Int] -> Int -> Int -> StateT RContext m ()
-solve c x b d = do
+-- solve :: (MonadError RFailure m, MonadState RContext m, Functor m, Monad m)
+solve l c x b d = do
   analysis <- (\x y z -> M.fromList $ x ++ y ++ z)
               <$> mapM (analysisM . snd) c
               <*> (mapM analysisM $ [b,d])
@@ -82,11 +78,15 @@ solve c x b d = do
               >>= return . (\s0 -> foldl depsExtend s0 c)
               
   let worklist = D.fromList c
-      (_,res) = trace (show (deps,worklist,analysis)) execState (solveIt deps) (worklist,analysis)
-  return $ case ((\(Just x) -> x) $ M.lookup b res, (\(Just x) -> x) $ M.lookup d res) of
-    (Left ann, Right eff) -> (ann,eff)
-    err -> error $ "Invalid result for solve: " ++ show err
-  
+  (_,res) <- execStateT (solveIt l deps) (worklist,analysis)
+  case ((\(Just x) -> x) $ M.lookup b res, (\(Just x) -> x) $ M.lookup d res) of
+    (Left ann, Right eff) -> return (ann,eff)
+    (a,b) -> throwError $ Failure l [
+        toMsg "Invalid result for solve: ",
+        toMsg " the value ", toMsg a,
+        toMsg " was expected to be an annotation ",
+        toMsg " and the value ", toMsg b,
+        toMsg " was expected to be an effect"]  
 
   where
     analysisC v = do

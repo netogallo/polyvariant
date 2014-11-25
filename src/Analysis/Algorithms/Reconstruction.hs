@@ -93,11 +93,11 @@ reconstructionF s0 = C.foldM alg
       t1'@(At.Arr (At.Ann t2' (An.Var b2')) phi' (At.Ann t' psi')) <- case tx of
             tx'@(At.Arr (At.Ann _ (An.Var _)) _ (At.Ann _ _)) -> return tx'
             _ -> throwError $ Failure i [
-              C1 "The type ",
-              C4 tx,
-              C1 " resulting from the I algorithm",
-              C1 " does not have the expected structure ",
-              C4 (At.Arr (At.Ann (At.Var 2) (An.Var 2)) (E.Var 1) (At.Ann (At.Var 1) (An.Var 1)))]
+              toMsg "The type ",
+              toMsg tx,
+              toMsg " resulting from the I algorithm",
+              toMsg " does not have the expected structure ",
+              toMsg (At.Arr (At.Ann (At.Var 2) (An.Var 2)) (E.Var 1) (At.Ann (At.Var 1) (An.Var 1)))]
       d <- getFreshIx $ ASort $ S.Eff
       b <- getFreshIx $ ASort $ S.Ann
       omega <- M.insert b2' (Left $ An.Var b2) <$> match i M.empty t2 t2'
@@ -143,16 +143,20 @@ reconstructionF s0 = C.foldM alg
 
     iffF i (_,b1,d1,c1) (t2,b2,d2,c2) (t3,b3,d3,c3) = do
       fvG <- use fvGammas
-      let t = At.normalize $ joinTypes t2 t3
+      t <- At.normalize <$> joinTypes i t2 t3
       bSort <- case filter isJust $ map (\v -> M.lookup v fvG) [b2,b3] of
-            [] -> return AnyAnnotation
-            (Just s1):(Just s2):_ | s1 == s2 -> return s1
-            (Just s1):[] -> return s1
-            s1:s2:_ -> throwError $ Failure i [
-              C1 "Inconsistent sorts in the if-statement: ",
-              C5 s1,
-              C1 " and ",
-              C5 s2]
+        [] -> return AnyAnnotation
+        (Just s1):(Just s2):_ | s1 == s2 -> return s1
+        (Just s1):[] -> return s1
+        (Just s1):(Just s2):_ -> throwError $ Failure i [
+          toMsg "Inconsistent sorts in the if-statement: ",
+          toMsg s1,
+          toMsg " and ",
+          toMsg s2]
+        err -> throwError $ Failure i [
+          C1 "Inconsistent sorts in the if-statements ",
+          C1 $ "Failed to join: " ++ show err
+          ]
       updateSort b1 $ ASort S.Ann
       b0 <- getFreshIx bSort
       d0 <- getFreshIx $ ASort S.Eff
@@ -169,7 +173,7 @@ reconstructionF s0 = C.foldM alg
           gamma = (\(Just x) -> x) . M.lookup i $ s0 ^. gammas
           ffv = map (snd . snd) $ M.toList $ M.delete (C.name var) gamma
           x = D.fromList $ [b1] ++ map S.name xis ++ ffv
-          solver c x b d = solve c x b d
+          solver c x b d = solve i c x b d
       (psi1,phi0) <- solver c1 (D.toList x) b2 d0
       b0 <- getFreshIx $ ASort S.Ann
       d0 <- getFreshIx $ ASort S.Eff
@@ -186,31 +190,4 @@ reconstruction t = runIdentity $ flip runStateT rcontext $ runExceptT $ do
   s1 <- lift $ calcCompletions s0 t
   s2 <- calcGammas s1 t
   reconstructionF s2 t
-  
-
---     abs i l var (t2,b2,d0,c1) = do
---       b1 <- fromJust . M.lookup (i,B1) . (^.annotations) <$> get
---       (_,comps) <- (\(Just x) -> x) . M.lookup i . (^.completions) <$> get
---       let x = D.fromList $ [b1] ++ comps
---       undefined
-
---     ifelse i l (_,t1,b1,d1,c1) (t2,b2,d2,c2) (t3,b3,d3,c3) = do
---       let tau = joinTypes t2 t3
---       beta <- freshAnn
---       delta <- freshEff
---       let c = D.unions [
---             D.fromList [
---                (Right $ E.Var $ S.name d1, delta),
---                (Right $ E.Flow l (An.Var b1), delta),
---                (Right $ E.Var $ S.name d2, delta),
---                (Right $ E.Var $ S.name d3, delta),
---                (Left $ An.Var $ S.name b2, beta),
---                (Left $ An.Var $ S.name b3, beta)
---             ],
---             c1,c2,c3]
---       return (tau,beta,delta,c)
-      
---     alg = Algebra{fabs=abs}
-
--- getContext t = undefined
 
