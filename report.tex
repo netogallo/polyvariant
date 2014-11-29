@@ -1,0 +1,97 @@
+\documentclass[8pt]{extarticle}
+\usepackage{extsizes}
+\usepackage{fullpage}
+\usepackage{amsmath,amsfonts,amssymb}
+\usepackage{cite}
+\usepackage{hyperref}
+\usepackage{listings}
+\usepackage{alltt}
+\title{Experimentation Project}
+\author{Ernesto Rodriguez}
+\begin{document}
+\maketitle
+\section{Introduction}
+This document describes the implementation of the analysis named: "Polyvariant Flow Analysis with Higher-ranked Polymorphic Types and Higher-order Effect Operators". This is a flow analysis for a higher order language which uses higher-ranked types to increase the presicion. The result of the analysis is delivered as an annotated type system for a simply typed lambda calculus. The major limitation of the analysis is that it does not support polymorphic types.
+\\\\
+The analysis has been implemented in the Haskell programming language and also includes an interactive web interface that can be compiled using GHCJS\cite{GHCJS}. Alternatively, the analysis can be compiled with the GHC compiler and the input is read form the standard input and the ouput is a Latex document with the results of the analysis.
+\section{File Structure}
+The code is divided in three modules: algorithms, types and web. The web group only contains details about manipulating dom elements and interfacing with the other two containers so it is not interesting and will not be explained any futher.
+\section{Types}
+This module defines all the types that were defined to model the analysis. This ammounts to:
+\begin{itemize}
+\item A type for the lambda calculus (LambdaCalc.hs)
+\item A type for simple types (Type.hs)
+\item A type for annotated types (AnnType.hs)
+\item A type for effects (Effect.hs)
+\item A type for annotations (Annotation.hs)
+\item A type for Sorts (Sorts.hs)
+\end{itemize}
+Additionally, the module contains the \verb+Common+ component which defines algorithms that operates in many of those types.
+\subsection{Traversals}
+Tree traversals over the mentioned types are defined as folds. The \verb+Common+ component provides a type class called \verb+Fold+ which defines the necessary methods for basic traversal over a structure. This includes a function to fold over the structure and two algebras: the regular algebra and the group algebra. The fold function is expected to provide a unique index to all elements of the structure and the functions of each of the algebras always take as a first argument that index.
+\\\\
+Algebras are parametrized by three types: \verb+alg m s r+. The \verb+m+ parameter is the monad under which the algebra operates. The \verb+s+ parameter is the type of the structure the algebra is meant to traverse and the \verb+r+ parameter is the type of the state and result of a fold that uses such algebra.
+\\\\
+The {\bf regular algebra} is meant for either manipulating the three or performing some effectful computation while traversing the tree. The result or state of of folds that use that algebra are of the same type as the structure they traverse (ie. they are of type \verb+alg m s s+). The most common use of the algebra is performing applications or substitutions. The function \verb+baseAppAlg+ defines an algebra that performs application to a lambda calculus like term.
+\\\\
+The {\bf group algebra} is meant to collect results from a catamorphism. The \verb+Group+ typeclass as defined in this component is equivalent to a monoid. It defines an operation to join to elements of the group and an empty element. The most common use of this algebra is with maps. Since the index of each component dosen't change from fold to fold, a traversal can save local results in a map and look them up in subsequent traversals.
+\\\\
+The first refinement of \verb+Fold+ is the type class \verb+WithAbstraction+. This type class models structures that can define scoped variables. Variables in this implementation are represented by integer values. The \verb+increment+ method of the class increments every variable by the specified ammount. Details about the importance of the function will come later. It also defines the method \verb+abst+ which serves to pattern match abstraction elements of the structure and the method \verb+abstC+ that serves to build abstractions of that structure.
+\\\\
+The \verb+LambdaCalculus+ class is a refinement of the \verb+WithAbstraction+ class. In addition to abstractions, structures that belong to this class also have variable occurences and applications. As before, it provides the methods \verb+app+, \verb+appC+, \verb+var+, \verb+varC+ to pattern match and construct application and variables. The algebras are extedned in a similar fashion.
+\\\\
+The final refinement is the \verb+WithSets+ class. This is the class of structures that contain sets. A set is modelled as an empty set and a union that joins elements to increase the size of the set. Additionally, the class can also have a case that contains a set of structures. This is a convenience facility for efficiency and to make comparison of elements easier. When the structure is being traversed by the \verb+foldM+ method, it is expected that this method un-packs the set case into a sequence of unions. Algebras over theese structures should make no assumptions on how the un-wrapping is done except that elements of the same set will be connected by unions. The algebra for theese structures does not contain a special case for the set branch since it should get converted to unions and handled as it were an union case.
+\subsection{Equality, Ordering and Normalization of Structures}
+The analysis requires certain operations to be defined in strucutres. Since it checks for type equality based on certain equality rules and defines algorithms under the assumption that types will be of a particular structure. The first requirement is some notion of structural equality. This is achieved by:
+\begin{itemize}
+\item Having a uniform naming convention for variables.
+\item Having an ordering defined for elements and ensure that the unions or sets are always ordered with respect to that ordering.
+\end{itemize}
+The uniform nameing convention is achieved by nameing each variable according to the number of abstraction nestings that occur until the abstraction that introduces the variable. The depth of the abstractions that occur in a term are defined as follows:
+\begin{lstlisting}[
+  mathescape,
+  columns=fullflexible,
+  basicstyle=\fontfamily{lmvtt}\selectfont,
+]
+  depths $(\lambda x.t)$ = $\{\lambda x.t\ \to\ 1\}\ \cup\ \{t'\ \to\ d + 1\ |\ (t'\ \to\ d + 1)\ \in$ depths $t\}$
+  depths $(t_1\ t)$ = depths $t_1\ \cup$ depths $t$
+  depths $x$ = $\emptyset$
+\end{lstlisting}
+Using this notion of depth of an abstraction, it is possible to define a nameing convention where the name of a variable is always the depth of the abstraction where it was introduced. With this notion in place, care must be taken when performing applications since an application changes the depht of all variables inside the terms being applied. To perform applications, first an auxiliary function \verb+increment+ is defined (which is the same as the one in the \verb+WithAbstraction+ type class):
+\begin{lstlisting}[
+  mathescape,
+  columns=fullflexible,
+  basicstyle=\fontfamily{lmvtt}\selectfont,
+]
+  increment i t = increment' t
+    where
+      increment' $(\lambda x.t)$ = $\lambda (x+i).$ increment' $t$
+      increment' $(t_1 t)$ = (increment' $t_1$) (increment' $t$)
+      increment' $x$ when $x \in$ freeVariables(t) = x
+      increment' $x$ = x + i
+\end{lstlisting}
+A basic algebra that performs this increment is is provided in the \verb+Analysis.Types.Common+ package and is called \verb+baseIncAlg+. This algebra implements the common requirements for a lambda calculus and can be extended to handle more complex structures. Now assuming that one has two terms \verb+t1+ and \verb+t2+ with all variables named according to the depth of the binder where they wehere introduced. The application \verb+t1 t2+ is performed by:
+\begin{enumerate}
+\item Incrementing the variables of \verb+t2+ by one
+\item Perfroming the application (as usual)
+\item Decrementing the variables of the result by one
+\end{enumerate}
+This notion of application allows lambda terms to be named according to the depths and then perform reductions such that terms will reduce to the same terms. It is still the case that terms containing unions have to be ordered in some uniform way to perform equality checks. Fortunately, using the derived \verb+Ord+ instance from GHC, the ordering works as needed. This is evidenced by the tests included in the package Analysis.Types which live in the folder test.
+\\\\
+To sumarize, the normal form of a term is obtained by:
+\begin{enumerate}
+\item Re-naming the variables according to the naming convention discussed above
+\item Reducing the term until a fixpoint is found
+\item Grouping all unions that appear in the term inside a Set (from \verb+Data.Set+)
+\end{enumerate}
+\subsection{Reduction}
+The addition of sets to the language requries a couple of extra reduction rules to ensure normal forms are indeed equal. Theese rules are implemented in \verb+Analysis.Types.Common+ package by the algebra \verb+baseRedUnionAlg+. Below they are defined:
+\begin{lstlisting}[
+  mathescape,
+  columns=fullflexible,
+  basicstyle=\fontfamily{lmvtt}\selectfont,
+]
+  (t1 $\cup$ t2) t3 $\rightarrow$ (t1 t3 $\cup$ t2 t3)
+  ($\lambda$ x . t1) $\cup$ ($\lambda$ x . t2) $\rightarrow$ $\lambda$ x . t1 $\cup$ t2
+\end{lstlisting}
+\end{document}

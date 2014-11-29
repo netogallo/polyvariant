@@ -5,14 +5,11 @@ import Control.Applicative
 import Analysis.Types.Sorts
 import Control.Applicative()
 
-allSorts = foldl mkSorts [Ann,Eff] [1..]
+maxComplexity = 5
+
+allSorts = foldl mkSorts [Ann,Eff] [1..(maxComplexity + 1)]
   where
     mkSorts s _ = s ++ concatMap (\x -> map (Arr x) s) s
-
--- The sorts are enumerated ad-infinitum by the function
--- above and this decides how much of them are considered
--- for arbitrary generation
-maxComplexity = 30
 
 instance Arbitrary Sort where
 

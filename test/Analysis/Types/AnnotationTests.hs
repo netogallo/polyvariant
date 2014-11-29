@@ -7,24 +7,28 @@ import qualified Analysis.Types.CommonTests as CT
 import Test.QuickCheck.Gen
 import Test.QuickCheck
 import Control.Applicative
-import Control.Monad (foldM, (>=>))
 import qualified Data.Map as M
 import Control.Monad.State
 import qualified Data.Set as D
-import Data.Maybe (isJust,fromJust)
 
 data Equiv = Equiv Annotation Annotation deriving Show
 
 arbitraryWithGammaAndSort :: M.Map Int S.Sort -> S.Sort -> Gen Annotation
-arbitraryWithGammaAndSort gamma' sort' = arbitrary' (0 :: Int) gamma' sort'
+arbitraryWithGammaAndSort gamma' sort' = evalStateT (arbitrary' (0 :: Int) gamma' sort') 0
    where
-      arbitrary' pUn gamma sort = do
-        p <- choose (0,99) :: Gen Int
-        let varRange = elements $ [1..3]
-            lbl = elements $ map show [1..100]
+     arbitrary' pUn gamma sort = do
+       sz <- get
+       put (sz + 1)
+       if sz > CT.maxTermSize
+         then return $ C.emptyG sort
+         else arbitrary'' pUn gamma sort
+     arbitrary'' pUn gamma sort = do
+        p <- lift $ choose ((0,99) :: (Int,Int))
+        let varRange = lift $ elements $ [1..3]
+            lbl = lift $ elements $ map show [1..100]
         var <- case filter ((== sort) . snd) $ M.toList gamma of
           [] -> return Nothing
-          vs -> Just . fst <$> elements vs
+          vs -> Just . fst <$> lift (elements vs)
           
         ann' <- case sort of
           S.Eff -> error "Annotations cannot have effect in the Sort"
@@ -35,7 +39,7 @@ arbitraryWithGammaAndSort gamma' sort' = arbitrary' (0 :: Int) gamma' sort'
             ann <- arbitrary' pUn (M.insert v a1 gamma) a2
             return $ Abs (S.Var v a1) ann
             
-        pOver <- choose (0,99) :: Gen Int
+        pOver <- (lift (choose (0,99) :: Gen Int))
         ann' <- case var of
           _ | pOver `mod` 10  < 1 -> do
             ann1 <- arbitrary' pUn gamma (S.Arr S.Ann sort)
@@ -44,7 +48,7 @@ arbitraryWithGammaAndSort gamma' sort' = arbitrary' (0 :: Int) gamma' sort'
           Just v | pOver `mod` 3 > 0 -> return $ Var v
           _ -> return ann'
           
-        pUn' <- choose (1,pUn + 7)
+        pUn' <- lift $ choose (1,pUn + 7)
         let mkUnion = do
               u1 <- arbitrary' (pUn + 1) gamma' sort
               u2 <- arbitrary' (pUn + 1) gamma' sort

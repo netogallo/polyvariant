@@ -15,22 +15,11 @@ import Control.Monad
 import Control.Monad.State
 import Control.Monad.Except
 
-emptyG s' = evalState (go s') 1
-  where
-    go s =
-      case s of
-        S.Eff -> return C.emptyC
-        S.Ann -> return C.emptyC
-        S.Arr s1 s2 -> do
-          i <- get
-          modify (+1)
-          C.abstC (S.Var i s1) <$> go s2
-
 emptyTerm :: SortConstraint -> Either A.Annotation E.Effect
 emptyTerm s' =
   case s' of
-    ASort s | S.annSort s -> Left $ emptyG s
-    ASort s -> Right $ emptyG s
+    ASort s | S.annSort s -> Left $ C.emptyG s
+    ASort s -> Right $ C.emptyG s
     AnyAnnotation -> Left C.emptyC
     AnyEffect -> Right C.emptyC
 

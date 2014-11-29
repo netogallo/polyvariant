@@ -13,18 +13,25 @@ import qualified Data.Set as D
 import qualified Data.Map as M
 import Data.Maybe (fromJust)
 import Control.Monad.Identity
+import qualified Analysis.Types.Common as C
 
 data Equiv = Equiv Effect Effect deriving Show
 
 arbitraryWithSort = arbitraryWithGammaAndSort M.empty
 
-arbitraryWithGammaAndSort gamma' sort' = arbitrary' gamma' sort'
+arbitraryWithGammaAndSort gamma' sort' = evalStateT (arbitrary' gamma' sort') 0
   where
     arbitrary' gamma sort = do
-      pEff <- elements [1..20]
+      sz <- get
+      put (sz + 1)
+      if sz > maxTermSize
+        then return $ C.emptyG sort
+        else arbitrary'' gamma sort
+    arbitrary'' gamma sort = do
+      pEff <- lift $ elements ([1..20] :: [Int])
       let varRange = [1..3]
-          mkAnnotation = AT.arbitraryWithGammaAndSort gamma S.Ann
-          lbl = elements $ map show ([1..100] :: [Int])
+          mkAnnotation = lift $ AT.arbitraryWithGammaAndSort gamma S.Ann
+          lbl = lift $ elements $ map show ([1..100] :: [Int])
           mkApp = do
             e1 <- arbitrary' gamma (S.Arr S.Eff sort)
             e2 <- arbitrary' gamma S.Eff
@@ -35,10 +42,10 @@ arbitraryWithGammaAndSort gamma' sort' = arbitrary' gamma' sort'
             return $ AppAnn e1 e2
       var <- case filter (\(_,sort'') -> sort == sort'') $ M.toList gamma of
         [] -> return Nothing
-        vs -> Just . fst <$> elements vs
+        vs -> Just . fst <$> lift (elements vs)
       eff <- case sort of
         S.Arr s1 s2 -> do
-          v <- elements varRange
+          v <- lift $ elements varRange
           eff <- arbitrary' (M.insert v s1 gamma) s2
           return $ Abs (S.Var v s1) eff
         S.Eff | pEff < 5 -> Flow <$> lbl <*> mkAnnotation
@@ -47,7 +54,7 @@ arbitraryWithGammaAndSort gamma' sort' = arbitrary' gamma' sort'
         S.Eff | pEff < 18 -> mkApp
         S.Eff -> mkAppAnn
         S.Ann -> fail "Cannot make Effect of sort Ann"
-      alt <- elements [1..3]
+      alt <- lift $ elements ([1..3] :: [Int])
       return $ case var of
         Just v | alt > 1 -> Var v
         _ -> eff
@@ -153,5 +160,23 @@ randomRewrite e = foldEffectM alg e
       fappAnn = \i a1 a2 -> mutate i $ AppAnn a1 a2,
       fflow = \i l eff -> mutate i $ Flow l eff
       }
+
+data TestMergeAbst = TMA (Effect,Effect,Effect) deriving (Show,Read)
+
+instance Arbitrary TestMergeAbst where
+  arbitrary = do
+    v <- S.Var <$> elements [1..5] <*> arbitrary
+    let gamma = M.fromList [(S.name v,S.sort v)]
+        mkEff = Abs v <$> arbitraryWithGammaAndSort gamma S.Eff
+    e1 <- mkEff
+    e2 <- mkEff
+    e3 <- arbitrary
+    return $ TMA (e1,e2,e3)
+
+redUnionEq (TMA (Abs v e1,Abs _ e2,e3)) =
+  let comp = C.unions $ redUnions $ Abs v (Union e1 e2)
+  in case C.unions $ redUnions $ Set $ D.fromList [Abs v e1,e3,Abs v e2] of
+        Set res -> D.member comp res
+        res -> res == comp
 
 normalizeEquivalent (Equiv a b) = normalize a == normalize b

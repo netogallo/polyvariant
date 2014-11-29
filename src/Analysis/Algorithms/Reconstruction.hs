@@ -50,7 +50,9 @@ calcCompletions s0 = C.foldM alg
 
 calcGammas s0 = C.foldM alg
   where
+    app i s1 s2 = return $ gammas %~ M.insert i M.empty $ s1 C.<+> s2
     var i _ = return $ gammas %~ M.insert i M.empty $ s0
+    fixF i s = return $ gammas %~ M.insert i M.empty $ s
     abs i v s = do
       b1 <- getFreshIx (ASort S.Ann)
       let Just (t1,_) = (M.lookup i) $ s ^. completions
@@ -59,7 +61,7 @@ calcGammas s0 = C.foldM alg
              $ gammas %~ up
              $ freshFlowVars %~ M.insertWith M.union i (M.fromList [(B1,b1)])
              $ s
-    alg = (groupAlgebraInit s0){fabs=abs,fvar=var}          
+    alg = (groupAlgebraInit s0){fabs=abs,fvar=var,fapp=app, ffix=fixF}
 
 reconstructionF :: (MonadError RFailure m, MonadState RContext m, C.Fold a (Algebra T.Type), Functor m, Monad m, Applicative m) =>
                    RState -> a -> m (At.Type, Int, Int, [(Either An.Annotation E.Effect, Int)])
@@ -116,21 +118,23 @@ reconstructionF s0 = C.foldM alg
       return (t,b,d,c) 
 
     fixF i (t1,b1,d1,c1) = do
+      let 
       t1'@(At.Arr (At.Ann t' b') phi0 (At.Ann t'' psi'')) <- At.normalize <$> inst t1
       d <- getFreshIx $ ASort $ S.Eff
       b <- getFreshIx $ ASort $ S.Ann
       omega1 <- match i M.empty t'' t'
       let
-          (annOmega1,_) = M.mapEither id omega1
-          omega2 = M.fromList [(b1,Left $ An.replaceFree annOmega1 psi'')]
-          (annOmega2,_) = M.mapEither id omega2
-          c :: [(Either An.Annotation E.Effect, Int)]
-          c = [
-            (Right $ E.Var d1,d), (Right $ E.Flow (show i) (An.Var b1),d),
-            (Right $ E.replaceFree omega2 $ E.replaceFree omega1 phi0, d),
-            (Left $ An.replaceFree annOmega2 $ An.replaceFree annOmega1 psi'', b)
-            ] ++ c1
-          t = At.replaceFree omega2 $ At.replaceFree omega1 t'
+        An.Var ib' = b'
+        (annOmega1,_) = M.mapEither id omega1
+        omega2 = M.fromList [(ib',Left $ An.replaceFree annOmega1 psi'')]
+        (annOmega2,_) = M.mapEither id omega2
+        c :: [(Either An.Annotation E.Effect, Int)]
+        c = [
+          (Right $ E.Var d1,d), (Right $ E.Flow (show i) (An.Var b1),d),
+          (Right $ E.replaceFree omega2 $ E.replaceFree omega1 phi0, d),
+          (Left $ An.replaceFree annOmega2 $ An.replaceFree annOmega1 psi'', b)
+          ] ++ c1
+        t = At.normalize $ At.replaceFree omega2 $ At.replaceFree omega1 t'
       modify (history %~ (FixLog (t,c,i,b,d) t1' omega1 omega2 :))
       return (t, b, d, c)
 
@@ -190,4 +194,9 @@ reconstruction t = runIdentity $ flip runStateT rcontext $ runExceptT $ do
   s1 <- lift $ calcCompletions s0 t
   s2 <- calcGammas s1 t
   reconstructionF s2 t
+  -- let
+  --   gamma = (\(Just x) -> x) . M.lookup 0 $ s2 ^. gammas
+  --   ffv = map (snd . snd) $ M.toList gamma
+  -- (b0,d0) <- solve 0 c ffv b d
+  -- return (t,b0,d0,c)
 

@@ -57,7 +57,7 @@ renderAnn ann = runIdentity $ A.foldAnnM alg ann
   where
     varf :: LaTeXC l => Int -> Int -> Identity l
     varf _ v = return $ beta ^: texy v
-    absf _ (S.Var v s) b = return $ lambda
+    absf _ (S.Var v s) b = return $ autoParens $ lambda
                            <> beta ^: texy v
                            <> stexy ":"
                            <> renderSort s
@@ -88,7 +88,7 @@ renderEff elm = runIdentity $ E.foldEffectM alg elm
     absf _ v b =
       let var | S.annSort $ S.sort v = beta ^: (texy $ S.name v)
               | otherwise = delta ^: (texy $ S.name v)
-      in return $ lambda <> var <> (stexy ":")
+      in return $ autoParens $ lambda <> var <> (stexy ":")
          <> texy (S.sort v) <> quad <> (stexy ".") <> quad <> b
     unionf i _ _ =
       let (E.Set s) = C.unions $ (\(Just x) -> x) $ C.byId i elm
@@ -151,7 +151,7 @@ renderLambdaCalc expr = runIdentity $ L.foldLambdaCalcM alg expr
       <> quad <> mathbf (stexy "then") <> quad <> yes
       <> quad <> mathbf (stexy "else") <> quad <> no
     appF i a1 a2 = return $ label i $ a1 <> appL <> a2
-    fixF i a1 = return $ mathbf (stexy "fix") <> quad <> a1
+    fixF i a1 = return $ label i $ mathbf (stexy "fix") <> quad <> a1
     alg :: (LaTeXC l,Texy t) => L.Algebra t Identity (L.LambdaCalc t) l
     alg = L.Algebra{
       L.fvar = varF,

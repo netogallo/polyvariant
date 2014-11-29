@@ -8,7 +8,10 @@ import qualified Control.Monad as M
 import Control.Applicative
 import Control.Monad.State hiding (foldM)
 import qualified Data.Map as Ma
+import Control.Monad.Identity (runIdentity)
 
+maxTermSize = 20
+ 
 (\\) (_:xs) 0 = xs
 (\\) (x:xs) i = x : xs \\ (i-1)
 
@@ -102,3 +105,11 @@ baseProbUnionAlg = groupUnionAlgebra baseProbAlg unionF emptyF
   where
     emptyF i = return $ Ma.fromList [(i,1)]
     unionF i m1 m2 = return $ Ma.insert i 1 $ Ma.map (+1) $ Ma.union m1 m2
+
+redUnions :: (Ord a, WithSets a alg, LambdaCalculus a alg) => a -> a
+redUnions es = runIdentity $ red es >>= go es
+  where
+    red = foldM baseRedUnionAlg
+    go e1 e2
+      | e1 == e2 = return e1
+      | otherwise = red e2 >>= go e2

@@ -8,7 +8,11 @@ import qualified Data.Set as D
 import Control.Monad.Identity (runIdentity)
 import Control.Monad hiding (foldM,void)
 import Control.Monad.State hiding (void,foldM)
+import Control.Applicative ((<$>))
+import Data.List (groupBy)
 
+-- | Type to represent wehter a variable is free
+-- or bound
 data Boundness = Bound | Free deriving (Show,Eq,Enum,Ord)
 
 data Variable t =
@@ -18,6 +22,8 @@ data Variable t =
 name (Var n _) = n
 set (Var _ s) = s
 
+-- | Equivalent to monoid. Class of the elements that have
+-- an empty member and a method to join two members
 class Group a where
   void :: a
   (<+>) :: a -> a -> a
@@ -30,38 +36,87 @@ instance Ord k => Group (M.Map k v) where
   void = M.empty
   (<+>) = M.union
 
+-- | The class for elements that can be traversed
 class Fold a alg | a -> alg where
+  -- | Method to find an element of the structure which
+  -- is indexed by the given index
   byId :: Int -> a -> Maybe a
+  -- | Mehtod that defines how to fold over a structure
+  -- when provided whith a particular algebra
   foldM :: Monad m => alg m a x -> a -> m x
+  -- | Algebra to traverse the structure and produce
+  -- a result with the same type as the structue
   baseAlgebra :: Monad m => alg m a a
+  -- | Algebra to traverse the structure and produce
+  -- a result of the Group typeclass
   groupAlgebra :: (Monad m, Group g) => alg m a g
 
+-- | The class for structures that can define scoped variables
+-- that live inside the structure
 class Fold a alg => WithAbstraction a alg | a -> alg where
+  -- | Function to pattern match an abstraction element of
+  -- the structure
   abst :: a -> Maybe (S.FlowVariable,a)
+  -- | Function to construct an abstraction of the input variable
+  -- with the second parameter as body
   abstC :: S.FlowVariable -> a -> a
+  -- | Method that increments the "name" of each variable by the
+  -- given integer
   increment :: Int -> a -> a
+  -- | Method that builds from a base algebra, an algebra that
+  -- applies the given function to the abstraction case
   baseAbstAlgebra :: (Monad m) => alg m a a -> (Int -> S.FlowVariable -> a -> m a) -> alg m a a
+  -- | Method that builds from a base group algebra, an algebra that
+  -- applies the given function to the abstraction case
   groupAbstAlgebra :: (Group g, Monad m) => alg m a g -> (Int -> S.FlowVariable -> g -> m g) -> alg m a g
+  -- | Function that returns a map containing the number of abstractions
+  -- that contain each of the components of the structure
   lambdaDepths :: a -> M.Map Int Int
+  -- | Function that returns a list of all variables that occur in
+  -- the structure along with the boundness of each variable
   vars :: a -> D.Set (Int,Boundness)
 
 class WithAbstraction a alg => LambdaCalculus a alg | a -> alg where
+  -- | Method to pattern match applications
   app :: a -> Maybe (a,a)
+  -- | Method construct applications
   appC :: a -> a -> a
+  -- | Method to pattern match variables
   var :: a -> Maybe Int
+  -- | Method to construct variables
   varC :: Int -> a
+  -- | Method to extend a base algebra to handle applications and variables
   baseCalcAlgebra :: Monad m => alg m a a -> (Int -> Int -> m a) -> (Int -> a -> a -> m a) -> alg m a a
+  -- | Method to extend a base group algebra to handle applications and variables
   groupCalcAlgebra :: (Group g, Monad m) => alg m a g -> (Int -> Int -> m g)  -> (Int -> g -> g -> m g) -> alg m a g
 
 class Fold a alg => WithSets a alg | a -> alg where
+  -- | Method to pattern match a union constructor
   unionM :: a -> Maybe (a,a)
+  -- | Method to construct a union of two elements
   unionC :: a -> a -> a
+  -- | Method to pattern match a set element
   setM :: a -> Maybe (D.Set a)
+  -- | Method to construct a set element
   setC :: D.Set a -> a
+  -- | Method to pattern match the empty set element
   emptyM :: a -> Maybe ()
+  -- | The empty set element
   emptyC :: a
+  -- | Method to extend an algebra with a union case and a empty case
+  -- for sets
   unionAlgebra :: (Monad m, Ord a) => alg m a a -> (Int -> a -> a -> m a) -> (Int -> m a) -> alg m a a
+  -- | Method to extend a group algebra with a union case and an
+  -- empty set case
   groupUnionAlgebra :: (Monad m, Ord x) => alg m a x -> (Int -> x -> x -> m x) -> (Int -> m x) -> alg m a x
+
+listFold :: WithSets a alg => [a] -> a
+listFold [] = emptyC
+listFold [x] = x
+listFold (x:xs) = foldl unionC x xs
+
+setFold :: WithSets a alg => D.Set a -> a
+setFold = listFold . D.toAscList
 
 defAlgebra :: (Monad m, WithAbstraction a alg, LambdaCalculus a alg) => alg m a a
 defAlgebra = baseCalcAlgebra (baseAbstAlgebra baseAlgebra baseAbst) baseVar baseApp
@@ -197,7 +252,7 @@ shadowsBaseAlg v = mkGroupCalcAlgebra varF abstF appF
       | S.name v' == v = return $ M.map (const True) s
       | otherwise = return s
 
--- Algebra to replace the given free variables
+-- | Algebra to replace the given free variables
 baseReplaceAlg rep elm = alg
   where
     boundVars i = (\(Just w_1919) -> w_1919) $ M.lookup i $ getBoundVars elm
@@ -209,6 +264,8 @@ baseReplaceAlg rep elm = alg
         Just new -> return new
     alg = mkCalcAlgebra varf baseAbst baseApp
 
+-- | Algebra that computes the application of the first argument
+-- to the second argument
 baseAppAlg :: (Fold a alg,LambdaCalculus a alg, Monad m) => a -> a -> alg m a a
 baseAppAlg (abst -> Just (var,a1)) a2 = alg $ lambdaDepths a1
   where
@@ -254,15 +311,28 @@ baseVarsAlg = mkGroupCalcAlgebra var abst app
     app _ a1 a2 = return $ D.union a1 a2
 
 
+groupAbst a b =
+  case (a,b) of
+    (abst -> Just (x,_), abst -> Just (x',_)) -> x == x'
+    _ -> False
+
+-- | Algebra that implements the reduction rules for set unions
 baseRedUnionAlg :: (LambdaCalculus a alg, Monad m, Ord a, WithSets a alg) => alg m a a
-baseRedUnionAlg = mkCalcAlgebra baseVar baseAbst appF
+baseRedUnionAlg = unionAlgebra (mkCalcAlgebra baseVar baseAbst appF) unionF baseEmpty
   where
     appF' _ a1 a2 = return $ appC a1 a2
     appF _ a1 a2 =
       return $ case (a1,a2) of
+        -- Rule to apply every element of a set to the argument of the application
         (unionM -> Just (a11,a12),_) -> unionC (appC a11 a2) (appC a12 a2)
-        (abst -> Just (v1,f1),abst -> Just (v2,f2)) | v1 == v2 -> abstC v1 $ unionC f1 f2
         _ -> appC a1 a2
+    unionF _ a1 a2 =
+      let (setM -> Just s) = unions $ unionC a1 a2
+          xs = groupBy groupAbst $ D.toAscList s
+          unify [x] = x
+          unify (a:as) =
+            foldl (\(abst -> Just (x,e1)) (abst -> Just (_,e2)) -> abstC x (unionC e1 e2)) a as
+      in return $ listFold $ map unify xs
 
 unions :: (Fold a alg, WithSets a alg, Ord a) => a -> a
 unions = runIdentity . foldM alg
@@ -307,3 +377,14 @@ byIdSetAlgebra i = unionAlgebra (byIdAlgebra i) unF emptyF
     emptyF i' = do
       unless (i /= i') $ put (Just emptyC)
       return emptyC
+
+emptyG s' = evalState (go s') 1
+  where
+    go s =
+      case s of
+        S.Eff -> return emptyC
+        S.Ann -> return emptyC
+        S.Arr s1 s2 -> do
+          i <- get
+          modify (+1)
+          abstC (S.Var i s1) <$> go s2

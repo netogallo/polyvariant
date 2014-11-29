@@ -120,7 +120,7 @@ foldAnnM f@Algebra{..} a0 = evalStateT (foldAnnM' undefined a0) 0
         App a1 a2 -> go fapp a1 a2
         Union a1 a2 -> go funion a1 a2
         -- Sets are treated as if they were unions
-        Set as -> foldAnnM' s $ foldl Union Empty $ D.toAscList as
+        Set as -> foldAnnM' s $ C.setFold as
         Var v -> lift $ fvar i v
         Abs v a1 -> (foldAnnM' s a1) >>= (lift . (fabs i v))
         Label l -> lift $ flabel i l

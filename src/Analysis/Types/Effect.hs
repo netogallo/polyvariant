@@ -136,7 +136,7 @@ foldEffectM f@Algebra{..} a0 = evalStateT (foldEffectM' undefined a0) 0
       case a of
         App a1 a2 -> go fapp a1 a2
         Union a1 a2 -> go funion a1 a2
-        Set as -> foldEffectM' s $ foldl Union Empty $ D.toAscList as
+        Set as -> foldEffectM' s $ C.setFold as
         Var v -> lift $ fvar i v
         Abs v a1 -> (foldEffectM' s a1) >>= (lift . (fabs i v))
         AppAnn a1 a2 -> (foldEffectM' s a1) >>= \s' -> lift $ fappAnn i s' a2

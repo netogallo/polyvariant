@@ -144,11 +144,11 @@ renderLog l =
 
 #ifdef COMPGHC
 
-instance Texy LogEntry where
-  texy e =
-    let rows = renderLog e :: [LaTeX]
-        mkTableRow s (e,v) = e Text.LaTeX.Base.& v <> lnbk <> s
-    in tabular Nothing [CenterColumn,CenterColumn] (foldl mkTableRow mempty rows)
+-- instance Texy LogEntry where
+--   texy e =
+--     let rows = renderLog e :: [LaTeX]
+--         mkTableRow s (e,v) = e Text.LaTeX.Base.& v <> lnbk <> s
+--     in tabular Nothing [CenterColumn,CenterColumn] (foldl mkTableRow mempty rows)
 
 #endif    
 
