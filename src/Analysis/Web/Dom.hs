@@ -21,6 +21,7 @@ import GHCJS.DOM.Types(
   castToHTMLDivElement,
   castToHTMLInputElement,
   castToHTMLHeadingElement,
+  castToHTMLParagraphElement,
   castToHTMLTableCellElement)
 import GHCJS.DOM.HTMLInputElement (htmlInputElementGetValue)
 import GHCJS.DOM.Element (elementOnclick)
@@ -40,6 +41,7 @@ import GHCJS.DOM.Node
 import GHCJS.DOM.Element
 import GHCJS.DOM.HTMLTextAreaElement
 import GHCJS.DOM.Document
+import Safe (readMay)
 
 foreign import javascript unsafe "reRender()"
   reRender :: IO ()
@@ -73,6 +75,8 @@ logName1 = "logDiv1"
 
 logName2 = "logDiv2"
 
+messagesName = "messages"
+
 examplesDiv = fmap castToHTMLDivElement . pageElement examplesName
 
 compileInput = fmap castToHTMLInputElement . pageElement compileName
@@ -82,6 +86,8 @@ calcInput = fmap castToHTMLTextAreaElement . pageElement calcInputName
 calcRender = fmap castToHTMLDivElement . pageElement calcRenderName
 
 typeRender = fmap castToHTMLDivElement . pageElement typeRenderName
+
+messagesDiv = fmap castToHTMLDivElement . pageElement messagesName
 
 logDivs ui = mapM (\e -> fmap castToHTMLDivElement $ pageElement e ui) [logName1,logName2]
 
@@ -136,15 +142,28 @@ renderEntry e = do
       addContent c2 e2
       return r
 
+clearMessages webUi = do
+  msgsDiv <- messagesDiv webUi
+  htmlElementSetInnerHTML msgsDiv ("" :: String)
+
+appendMessage webUi msg = do
+  msgsDiv <- messagesDiv webUi
+  (Just doc) <- currentDocument
+  (Just e') <- documentCreateElement doc ("p" :: String)
+  htmlElementSetInnerHTML (castToHTMLParagraphElement e') (msg :: String)
+  _ <- nodeAppendChild msgsDiv (Just e')
+  return ()
+
 compile webUi = do
-  calc <- (\e -> read $ trace (show t1) e) <$> (calcInput webUi >>= htmlTextAreaElementGetValue)
+  calc <- readMay <$> (calcInput webUi >>= htmlTextAreaElementGetValue)
   calcDiv <- calcRender webUi
   typeDiv <- typeRender webUi
+  clearMessages webUi
   logs <- logDivs webUi
-  let result = reconstruction calc
+  let result = calc >>= Just . reconstruction
   case result of
-    (Right (ty,_,_,_),ctx) -> do
-      htmlElementSetInnerHTML calcDiv $ T.unpack $ T.concat ["$$",R.render $ (texy calc :: LaTeX),"$$"]
+    Just (Right (ty,_,_,_),ctx) -> do
+      htmlElementSetInnerHTML calcDiv $ T.unpack $ T.concat ["$$",R.render $ (texy ((\(Just w_1919) -> w_1919) calc) :: LaTeX),"$$"]
       htmlElementSetInnerHTML typeDiv $ T.unpack $ T.concat ["$$",R.render $ (texy ty :: LaTeX),"$$"]
       mapM_ (flip htmlElementSetInnerHTML ("" :: String)) logs
       mapM_ (\e -> do
@@ -152,6 +171,7 @@ compile webUi = do
                 mapM_ (\l -> renderEntry e >>= nodeAppendChild l . Just) logs
 --                navButton e logs
                 return ()) $ _history ctx
+    Nothing -> appendMessage webUi ("Could not parse (read) the given expression." :: String)
     _ -> return ()
   reRender
 
