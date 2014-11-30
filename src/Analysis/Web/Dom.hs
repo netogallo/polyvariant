@@ -23,7 +23,7 @@ import GHCJS.DOM.Types(
   castToHTMLHeadingElement,
   castToHTMLParagraphElement,
   castToHTMLTableCellElement)
-import GHCJS.DOM.HTMLInputElement (htmlInputElementGetValue)
+import GHCJS.DOM.HTMLInputElement (htmlInputElementGetValue,htmlInputElementGetChecked)
 import GHCJS.DOM.Element (elementOnclick)
 import Analysis.Types.LambdaCalc
 import qualified Analysis.Types.Type as Ty
@@ -42,6 +42,7 @@ import GHCJS.DOM.Element
 import GHCJS.DOM.HTMLTextAreaElement
 import GHCJS.DOM.Document
 import Safe (readMay)
+import Control.Monad (unless)
 
 foreign import javascript unsafe "reRender()"
   reRender :: IO ()
@@ -81,6 +82,8 @@ messagesName = "messages"
 
 redCalcName = "redCalcRenderDiv"
 
+doRedName = "performReduction"
+
 examplesDiv = fmap castToHTMLDivElement . pageElement examplesName
 
 compileInput = fmap castToHTMLInputElement . pageElement compileName
@@ -96,6 +99,8 @@ messagesDiv = fmap castToHTMLDivElement . pageElement messagesName
 redCalcDiv = fmap castToHTMLDivElement . pageElement redCalcName
 
 effectsDivSel = fmap castToHTMLDivElement . pageElement effectsDivName
+
+doRedInputSel = fmap castToHTMLInputElement . pageElement doRedName
 
 logDivs ui = mapM (\e -> fmap castToHTMLDivElement $ pageElement e ui) [logName1,logName2]
 
@@ -162,10 +167,18 @@ appendMessage webUi msg = do
   _ <- nodeAppendChild msgsDiv (Just e')
   return ()
 
+renderReduction webUi term = do
+  redDiv <- redCalcDiv webUi
+  doRed <- doRedInputSel webUi >>= htmlInputElementGetChecked
+  unless (not doRed) $ do
+    case reduceExpr term of
+      (Left msg) -> appendMessage webUi msg
+      (Right red) -> htmlElementSetInnerHTML redDiv $ T.unpack $ T.concat [
+        "$$", R.render (texy red :: LaTeX), "$$"]
+
 compile webUi = do
   calc <- readMay <$> (calcInput webUi >>= htmlTextAreaElementGetValue)
   calcDiv <- calcRender webUi
-  redDiv <- redCalcDiv webUi
   typeDiv <- typeRender webUi
   effectsDiv <- effectsDivSel webUi
   clearMessages webUi
@@ -185,11 +198,9 @@ compile webUi = do
         "$$",R.render (texy eff :: LaTeX),"$$"]
     Nothing -> appendMessage webUi ("Could not parse (read) the given expression." :: String)
     _ -> return ()
-  case calc >>= Just . reduceExpr of
+  case calc of
     Nothing -> return ()
-    Just (Left msg) -> appendMessage webUi msg
-    Just (Right red) -> htmlElementSetInnerHTML redDiv $ T.unpack $ T.concat [
-        "$$", R.render (texy red :: LaTeX), "$$"]
+    Just term' -> renderReduction webUi term'
   reRender
 
 webMain = runWebGUI $ \webUi -> do
