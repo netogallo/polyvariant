@@ -193,10 +193,10 @@ reconstruction t = runIdentity $ flip runStateT rcontext $ runExceptT $ do
   s0 <- (initState t)
   s1 <- lift $ calcCompletions s0 t
   s2 <- calcGammas s1 t
-  reconstructionF s2 t
-  -- let
-  --   gamma = (\(Just x) -> x) . M.lookup 0 $ s2 ^. gammas
-  --   ffv = map (snd . snd) $ M.toList gamma
-  -- (b0,d0) <- solve 0 c ffv b d
-  -- return (t,b0,d0,c)
+  (t',b,d,c) <- reconstructionF s2 t
+  let
+    gamma = (\(Just x) -> x) . M.lookup 0 $ s2 ^. gammas
+    ffv = map (snd . snd) $ M.toList gamma
+  (b0,d0) <- solve 0 c ffv b d
+  return (At.normalize $ At.Ann t' b0,E.normalize d0)
 

@@ -67,6 +67,8 @@ typeRenderName = "typeRenderDiv"
 
 calcRenderName = "calcRenderDiv"
 
+effectsDivName = "effectsDiv"
+
 compileName = "compileInput"
 
 examplesName = "examplesDiv"
@@ -76,6 +78,8 @@ logName1 = "logDiv1"
 logName2 = "logDiv2"
 
 messagesName = "messages"
+
+redCalcName = "redCalcRenderDiv"
 
 examplesDiv = fmap castToHTMLDivElement . pageElement examplesName
 
@@ -88,6 +92,10 @@ calcRender = fmap castToHTMLDivElement . pageElement calcRenderName
 typeRender = fmap castToHTMLDivElement . pageElement typeRenderName
 
 messagesDiv = fmap castToHTMLDivElement . pageElement messagesName
+
+redCalcDiv = fmap castToHTMLDivElement . pageElement redCalcName
+
+effectsDivSel = fmap castToHTMLDivElement . pageElement effectsDivName
 
 logDivs ui = mapM (\e -> fmap castToHTMLDivElement $ pageElement e ui) [logName1,logName2]
 
@@ -157,12 +165,14 @@ appendMessage webUi msg = do
 compile webUi = do
   calc <- readMay <$> (calcInput webUi >>= htmlTextAreaElementGetValue)
   calcDiv <- calcRender webUi
+  redDiv <- redCalcDiv webUi
   typeDiv <- typeRender webUi
+  effectsDiv <- effectsDivSel webUi
   clearMessages webUi
   logs <- logDivs webUi
   let result = calc >>= Just . reconstruction
   case result of
-    Just (Right (ty,_,_,_),ctx) -> do
+    Just (Right (ty,eff),ctx) -> do
       htmlElementSetInnerHTML calcDiv $ T.unpack $ T.concat ["$$",R.render $ (texy ((\(Just w_1919) -> w_1919) calc) :: LaTeX),"$$"]
       htmlElementSetInnerHTML typeDiv $ T.unpack $ T.concat ["$$",R.render $ (texy ty :: LaTeX),"$$"]
       mapM_ (flip htmlElementSetInnerHTML ("" :: String)) logs
@@ -171,8 +181,15 @@ compile webUi = do
                 mapM_ (\l -> renderEntry e >>= nodeAppendChild l . Just) logs
 --                navButton e logs
                 return ()) $ _history ctx
+      htmlElementSetInnerHTML effectsDiv $ T.unpack $ T.concat [
+        "$$",R.render (texy eff :: LaTeX),"$$"]
     Nothing -> appendMessage webUi ("Could not parse (read) the given expression." :: String)
     _ -> return ()
+  case calc >>= Just . reduceExpr of
+    Nothing -> return ()
+    Just (Left msg) -> appendMessage webUi msg
+    Just (Right red) -> htmlElementSetInnerHTML redDiv $ T.unpack $ T.concat [
+        "$$", R.render (texy red :: LaTeX), "$$"]
   reRender
 
 webMain = runWebGUI $ \webUi -> do

@@ -1,4 +1,4 @@
-{-# Language ScopedTypeVariables #-}
+{-# Language ScopedTypeVariables, FlexibleContexts #-}
 module Analysis.Types.Render where
 import Analysis.Common
 import Text.LaTeX.Packages.AMSMath
@@ -131,7 +131,13 @@ renderAnnType = runIdentity . At.foldTypeM alg
       }
 
 renderLambdaCalc :: (LaTeXC l, Texy t) => (L.LambdaCalc t) -> l
-renderLambdaCalc expr = runIdentity $ L.foldLambdaCalcM alg expr
+renderLambdaCalc = iRenderLambdaCalc L.Algebra{}
+
+renderAnnLambdaCalc :: (LaTeXC l, Texy t) => (L.ALambdaCalc t) -> l
+renderAnnLambdaCalc = iRenderLambdaCalc L.Algebra{}
+
+iRenderLambdaCalc :: (LaTeXC l, Texy t, C.Fold a (L.Algebra t)) => L.Algebra t Identity a l -> a -> l
+iRenderLambdaCalc iAlg expr = runIdentity $ C.foldM alg expr
   where
     label i l = autoParens l ^: mathit (stexy $ "@" ++ show i)
     var v = stexy "x" ^: stexy (show v)
@@ -152,8 +158,8 @@ renderLambdaCalc expr = runIdentity $ L.foldLambdaCalcM alg expr
       <> quad <> mathbf (stexy "else") <> quad <> no
     appF i a1 a2 = return $ label i $ a1 <> appL <> a2
     fixF i a1 = return $ label i $ mathbf (stexy "fix") <> quad <> a1
-    alg :: (LaTeXC l,Texy t) => L.Algebra t Identity (L.LambdaCalc t) l
-    alg = L.Algebra{
+--    alg :: (LaTeXC l,Texy t) => L.Algebra t Identity (L.LambdaCalc t) l
+    alg = iAlg{
       L.fvar = varF,
       L.fvfalse = vfalseF,
       L.fvtrue = vtrueF,
@@ -168,6 +174,9 @@ instance Texy Ty.Type where
 
 instance Texy t => Texy (L.LambdaCalc t) where
   texy = renderLambdaCalc
+
+instance Texy t => Texy (L.ALambdaCalc t) where
+  texy = renderAnnLambdaCalc
 
 instance Texy S.Sort where
   texy = renderSort
