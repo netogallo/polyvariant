@@ -39,7 +39,8 @@ initState = C.foldM alg
       ffix = \i s -> return $ baseAll i C.<+> s
       }
 
--- calcCompletions :: (Functor m, Monad m) => RState -> LambdaCalc T.Type -> StateT RContext m RState
+-- | Function that calculates the value of the completion alorithm
+-- for every section of the LambdaCalc
 calcCompletions s0 = C.foldM alg
   where
     abs i v t = do
@@ -48,6 +49,10 @@ calcCompletions s0 = C.foldM alg
              $ t
     alg = (groupAlgebraInit s0){fabs=abs}
 
+-- | Function that traverses a LambdaCalc in order to calculate the
+-- value of the gamma type environment at every section of the structure
+-- it also initializes the freshFlowVars field of the structure since
+-- it is also necessary to initialize the environment
 calcGammas s0 = C.foldM alg
   where
     app i s1 s2 = return $ gammas %~ M.insert i M.empty $ s1 C.<+> s2

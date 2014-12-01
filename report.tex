@@ -28,7 +28,7 @@ This module defines all the types that were defined to model the analysis. This 
 \end{itemize}
 Additionally, the module contains the \verb+Common+ component which defines algorithms that operates in many of those types.
 \subsection{Traversals}
-Tree traversals over the mentioned types are defined as folds. The \verb+Common+ component provides a type class called \verb+Fold+ which defines the necessary methods for basic traversal over a structure. This includes a function to fold over the structure and two algebras: the regular algebra and the group algebra. The fold function is expected to provide a unique index to all elements of the structure and the functions of each of the algebras always take as a first argument that index.
+Tree traversals over the mentioned types are defined as folds. The \verb+Common+ component provides a type class called \verb+Fold+ which defines the necessary methods for basic traversal over a structure. This includes a function to fold over the structure and two algebras: the regular algebra and the group algebra. The fold function is expected to provide a unique index to all elements of the structure and the functions of each of the algebras always take as a first argument that index. All maps that indexed by integers used in this implementation use this unique identifier as their index.
 \\\\
 Algebras are parametrized by three types: \verb+alg m s r+. The \verb+m+ parameter is the monad under which the algebra operates. The \verb+s+ parameter is the type of the structure the algebra is meant to traverse and the \verb+r+ parameter is the type of the state and result of a fold that uses such algebra.
 \\\\
@@ -85,7 +85,7 @@ To sumarize, the normal form of a term is obtained by:
 \item Grouping all unions that appear in the term inside a Set (from \verb+Data.Set+)
 \end{enumerate}
 \subsection{Reduction}
-The addition of sets to the language requries a couple of extra reduction rules to ensure normal forms are indeed equal. Theese rules are implemented in \verb+Analysis.Types.Common+ package by the algebra \verb+baseRedUnionAlg+. Below they are defined:
+The addition of sets to the language requries a couple of extra reduction rules to ensure normal forms are indeed unique. Theese rules are implemented in \verb+Analysis.Types.Common+ package by the algebra \verb+baseRedUnionAlg+. Below they are defined:
 \begin{lstlisting}[
   mathescape,
   columns=fullflexible,
@@ -94,4 +94,36 @@ The addition of sets to the language requries a couple of extra reduction rules 
   (t1 $\cup$ t2) t3 $\rightarrow$ (t1 t3 $\cup$ t2 t3)
   ($\lambda$ x . t1) $\cup$ ($\lambda$ x . t2) $\rightarrow$ $\lambda$ x . t1 $\cup$ t2
 \end{lstlisting}
+Since the language contains sets, one must ensure that ordering of the elements of the set does not matter. In other words, the elements of a set must always be ordered in a uniform way. To achieve this, the derived \verb+Eq+ instance and the structure \verb+Data.Set+ are used. For this, the algebra \verb+unions+ is defined in \verb+Analysis.Types.Common+. This algebra traverses a structure and combines all elements connected by unions into a single set. This is the reason why the types \verb+Annotation+ and \verb+Effect+ contain a constructor named \verb+Set+. As mentioned above, the folds for each of the elements re-write theese sets as sequences of unions.
+\\\\
+The final ingredient of reductions is performing applications as mentioned in the section above.
+\\\\
+\section{Algorithms}
+The algorithms for the analysis are defined as algebras which are then used to traverse the structure. The four main algorithms are:
+\begin{enumerate}
+\item The completion algorithm (\verb+Analysis.Algorithms.Completion+).
+\item The instantiation algorithm (\verb+Analysis.Algorithms.Instantiation+).
+\item The join algorithm (\verb+Analysis.Algorithms.Join+).
+\item The matching algorithm (\verb+Analysis.Algorithms.Match+).
+\item The reconstruction algorithm (\verb+Analysis.Algorithms.Reconstruction+).
+\item The constraint solver (\verb+Analysis.Algorithms.Solve+).
+\end{enumerate}
+Additionally, the package \verb+Analysis.Algorithms.Common+ contains code which is common to all the algorithms. The following sections explain details on how theese algorithms were implemented.
+\subsection{Common}
+In this package, mostly structures for bookeeping the different stages of the algorithm are defined. The structure \verb+RState+ is used to store the value of variables created at different stages of the reconstruction algorithm. It contains three fields:
+\begin{itemize}
+\item \verb+freshFlowVars+ map that contains the identifiers assigned to the $\beta_1$ variables of the reconstruction algorithm. This is necessary because the variable is used as argument for a recursive call so all atoms of the \verb+LambdaCalc+ need access to its value.
+\item \verb+completions+ map that contains the value that results from calling the completion algorithm in the abstraction branch. The result of the completion is added to the environment and used in recursive calls. However, this map is not entirely necessary since the value could be recovered from the environment but it is defined for convenience.
+\item \verb+gammas+ This contains the value of the environment $\Gamma$ at every point in the reconstruction algorithm.
+\end{itemize}
+The values of the components of this strucutre are intialized by the functions \verb+calcCompletions+ and \verb+calcGammas+ of the module \verb+Analysis.Algorithms.Reconstruction+.
+The \verb+RContext+ structure is used as the state of the state monad where the reconstruction algorithm is being executed. It contains the fields:
+\begin{itemize}
+\item \verb+freshIx+ this field contains the value of the latest index that was given to a fresh variable. Fresh variables are always given a negative index and every time a new fresh variable is demanded, the value of this field is decreased by one.
+\item \verb+fvGammas+ this field contains a map which stores the sort that has been given to every fresh variable created at any stage of the algorithm
+\item \verb+history+ at every step of the reconstruction alorithm, the value that was assigned to all the variables present in that step is saved in this field. This allows easier inspection on how the final result was obtained.
+\end{itemize}
+The reconstruciton algorithm also contains an Exception monad to handle cases when an incorrectly typed lambda term is analyzed. To nicely display error messages, the \verb+FailureElement+ type is used. Details about this type are very technical because it is simply a choice type with many branches. The type is defined this way so different rendering mechanisms can display errors in the most suitable way.
+\subsection{Reconstruction}
+The algorithm is implemented very similarly as it is described in the paper. The main differences are that it is divided in three stages, namely \verb+calcGammas+, \verb+calcCompletions+ and \verb+reconstructionF+ which perform the steps indicated above. The other difference is that a logging and error reporting has been added to the algorithm. After the algorithm completes, a final constraint solving step is invoked to obtain the final annotation for the type and the set of effects that have been obtained for the type.
 \end{document}

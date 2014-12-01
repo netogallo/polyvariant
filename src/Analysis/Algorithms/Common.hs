@@ -77,6 +77,10 @@ type Constraint = (Either A.Annotation E.Effect, Int)
 -- (Result type, constraints, Label, beta, delta)
 type LogResult = (AT.Type, [(Either A.Annotation E.Effect,Int)], Int, Int, Int)
 
+-- | Datatype to log each recursive call in the R algorithm
+-- this datatype contains fields for all the cases of the
+-- R algorithm in order to store the value of all variables
+-- that are declared by the R algorithm
 data LogEntry =
   BasicLog LogResult
   -- | Base results, tau1, [Chi_i::s_i], X, Psi2, Phi0
@@ -109,6 +113,8 @@ renderVar (v,s)
   | S.annSort s = texy (A.Var v) <> stexy "::" <> texy s
   | otherwise = texy (E.Var v) <> stexy "::" <> texy s
 
+-- | Function that renders a log entry as a list of elements
+-- endoded in latex
 renderLog l =
   let
     asRows :: LogResult -> [(LaTeX,LaTeX)]
@@ -152,6 +158,10 @@ renderLog l =
 
 #endif    
 
+-- | This is the context under which the R algorithm is run. It contains
+-- information indicating the an index for fresh variables,
+-- an environment with the srots of all the variables that have been
+-- generated and a list of log entries.
 data RContext = RContext{
   _freshIx :: Int,
   _fvGammas:: M.Map Int SortConstraint,
@@ -160,9 +170,20 @@ data RContext = RContext{
 
 rcontext = RContext (-1) M.empty []
 
+-- | Structure which contains the states for each of the components
+-- of the structure being analyzed by the R algorithm. Each of the
+-- members of this structure is a map indexed by the unique identifier
+-- that is assigned to each block of the structure while it is being
+-- traversed
 data RState = RState{
+  -- | This map indexes the identifier assigend to all
+  -- the fresh variables created by the R algorithm
   _freshFlowVars :: M.Map Int (M.Map FreshVar Int),
+  -- | Contains the result of calling the completion
+  -- algorithm at different stages of the R algorithm
   _completions :: M.Map Int (AT.Type, [S.FlowVariable]),
+  -- | Contains the environment of the variables
+  -- used in the R algorithm
   _gammas :: M.Map Int (M.Map Int (AT.Type, Int))
 }
 

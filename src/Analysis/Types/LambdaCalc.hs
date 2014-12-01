@@ -1,4 +1,4 @@
-{-# Language MultiParamTypeClasses, FunctionalDependencies, RecordWildCards #-}
+{-# Language MultiParamTypeClasses, FunctionalDependencies, RecordWildCards, FlexibleContexts #-}
 module Analysis.Types.LambdaCalc where
 import qualified Analysis.Types.Common as C
 import Control.Monad.State
@@ -204,49 +204,72 @@ shadows v = runIdentity . (foldALambdaCalcM alg)
       ffix = fixF
       }
 
-replace v e e1 = runIdentity $ (foldALambdaCalcM alg e)
+replace v e e1 = snd $ runIdentity $ (foldALambdaCalcM alg e)
   where
-    shadowed = shadows v e
-    varF i v =
-      let isShadowed = (\(Just w_1919) -> w_1919) $ M.lookup i shadowed
-      in return $ if isShadowed then AVar i v else e1
-    alg = aalgebra{fvar = varF}
+    falseF i = return (AFalse i,AFalse i)
+    trueF i = return (ATrue i,ATrue i)
+    varF i v'
+      | v' == v = return $ (AVar i v',e1)
+      | otherwise = return $ (AVar i v',AVar i v')
+    absF i v' (ex1,ex2)
+      | v == C.name v' = let r = AAbs i v' ex1 in return (r,r)
+      | otherwise = return (AAbs i v' ex1, AAbs i v' ex2)
+    ifF i (cond1,cond2) (yes1,yes2) (no1,no2) =
+      return (
+        AIf i cond1 yes1 no1,
+        AIf i cond2 yes2 no2)
+    appF i (f1,f2) (a1,a2) = return  (AApp i f1 a1,AApp i f2 a2)
+    fixF i (fix1,fix2) = return (AFix i fix1,AFix i fix2)
+    alg = Algebra{
+      fvfalse = falseF,
+      fvtrue = trueF,
+      fabs = absF,
+      fif = ifF,
+      ffix = fixF,
+      fapp = appF,
+      fvar = varF}
 
-reduce e = (reduceStep e) >>= go e
+reduce whnf e = (reduceStep whnf e) >>= go e
   where
     go e1 (e2,effs)
       | e1 == e2 = return (e2,effs)
       | otherwise = do
-        (e2',effs') <- reduceStep e2
+        (e2',effs') <- reduceStep whnf e2
         go e2 (e2',effs ++ effs')
 
-reduceStep c =
+reduceStep whnf c =
   case c of
-    AApp i e1 e2 -> do
-      (e1',effs1) <- reduce e1
-      (e2',effs2) <- reduce e2
-      case e1' of
-        (AAbs i' v e) -> do
-          (e3,effs3) <- reduce $ replace (C.name v) e e2'
-          return (e3, (E.Flow (show i) (A.Label (show i'))) : effs1 ++ effs2 ++ effs3)
-        _ -> throwError $ "Cannot reduce: " ++ show c
-        
+    AApp i e1@(AFix _ _) e2 ->
+      if whnf then return (AApp i e1 e2,[]) else doApp i e1 e2
+    AApp i e1 e2 -> doApp i e1 e2
     AIf i cond yes no -> do
-      (cond',eff1) <- reduce cond
-      (yes',eff2) <- reduce yes
-      (no',eff3) <- reduce no
+      (cond',eff1) <- reduce whnf cond
       case cond' of
-        ATrue i' -> return $ (yes',eff1 ++ [E.Flow (show i) (A.Label (show i'))] ++ eff2)
-        AFalse i' -> return $ (yes',eff1 ++ [E.Flow (show i) (A.Label (show i'))] ++ eff3)
+        ATrue i' -> do
+          (yes',eff2) <- reduce whnf yes
+          return $ (yes',eff1 ++ [E.Flow (show i) (A.Label (show i'))] ++ eff2)
+        AFalse i' -> do
+          (no',eff3) <- reduce whnf no
+          return $ (no',eff1 ++ [E.Flow (show i) (A.Label (show i'))] ++ eff3)
         _ -> throwError $ "Cannot reduce: " ++ show c
     (AFix i e) -> do
-      (e',effs1) <- reduce e
+      (e',effs1) <- reduce whnf e
       case e' of
         (AAbs i' v ex) -> do
-          (e'',effs2) <- reduce $ replace (C.name v) ex (AFix i e)
+          (e'',effs2) <- reduce True $ replace (C.name v) ex (AFix i e)
           return (e'',effs1 ++ [E.Flow (show i) (A.Label (show i'))] ++ effs2)
         _ -> throwError $ "Cannot reduce: " ++ show c
     e -> return (e,[])
+  where
+    doApp i e1 e2 = do
+      (e1',effs1) <- reduce whnf e1
+      (e2',effs2) <- reduce whnf e2
+      case e1' of
+        (AAbs i' v e) -> do
+          (e3,effs3) <- reduce whnf $ replace (C.name v) e e2'
+          return (e3, (E.Flow (show i) (A.Label (show i'))) : effs1 ++ effs2 ++ effs3)
+        _ -> throwError $ "Cannot reduce: " ++ show c
+  
 
 reduceExpr :: (Show t,Eq t) => LambdaCalc t -> Either String (ALambdaCalc t,[E.Effect])
-reduceExpr = runExcept . reduce . addLabels
+reduceExpr = runExcept . reduce False . addLabels

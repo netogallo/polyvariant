@@ -26,4 +26,6 @@ t6 = App t5 VTrue
 
 t7 = App t3 t0
 
-allExamples = [t0,t1,t2,t3,t7,t4,t5,t6]
+t8 = App t4 (Abs (C.Var 2 (Arr TBool TBool)) (App (Var 2) VFalse))
+
+allExamples = [t0,t1,t2,t3,t7,t4,t8,t5,t6]

@@ -158,6 +158,16 @@ subAbs acons rep i v e =
 
 mkRepBase base = M.map (\e -> (e,True)) base
 
+-- | Algebra to perform renaming of variables based on the depth. This
+-- algebra takes as first argument base'' a map of pre-established
+-- replacements. The reason is that this algebra is designed to be used
+-- in structures that bind variables contained in other structures.
+-- For example an Effect can have an abstraction which binds an
+-- annotation variable. The offset parameters is provided to give
+-- an initial depth where the counting of lambda depths should start.
+-- This algebra dosen't perform the substitutions but returns a map
+-- indicating all the substitutions that should be peformed for each
+-- part of the structure.
 baseRepAbstAlg base'' offset e = groupAbstAlgebra groupAlgebra abstF
   where
     d = M.map (+1) $ lambdaDepths e
@@ -178,6 +188,7 @@ baseRepAbstAlg base'' offset e = groupAbstAlgebra groupAlgebra abstF
         base' = M.insert (S.name v) (name,False) base
       in return $ M.insert i base' $ m'
 
+-- | Same as baseRepAbstAlg but for the LambdaCalculus typeclass
 baseRepAlg base'' offset e = groupCalcAlgebra (baseRepAbstAlg base'' offset e) varF appF
   where
     d = M.map (+1) $ lambdaDepths e
@@ -187,11 +198,16 @@ baseRepAlg base'' offset e = groupCalcAlgebra (baseRepAbstAlg base'' offset e) v
 
 mkGetVar rep i v =  M.lookup v $ fromJust $ M.lookup i rep
 
+-- | Given a set of replacements for variables as calculated by the
+-- baseRepAlg, this algebra performs the substitutions on the argument
+-- structure and returns a new structure with such substitutions
+-- performed
 baseSubAbstAlg rep = baseAbstAlgebra baseAlgebra abstF
   where
     getVar i v = mkGetVar rep i v
     abstF i var e = return $ abstC var{S.name=fromJust $ getVar i (S.name var)} e
 
+-- | Same as baseSubAbstAlg but for the LambdaCalculus typeclass
 baseSubAlg :: (LambdaCalculus a alg, Monad m) => M.Map Int (M.Map Int Int) -> alg m a a
 baseSubAlg rep = baseCalcAlgebra (baseSubAbstAlg rep) varF appF
   where
@@ -203,6 +219,7 @@ baseSubAlg rep = baseCalcAlgebra (baseSubAbstAlg rep) varF appF
         _ -> error $ "Free variables must have a negative identifier, found: " ++ show i
     appF _ a1 a2 = return $ appC a1 a2
 
+-- | Same as the baseSubAlg but for the WithSets typeclass
 baseUnionRepAlg base' offset e = groupUnionAlgebra (baseRepAlg base' offset e) unionF emptyF
   where
     base = M.map (\e -> (e,True)) base'
@@ -232,6 +249,8 @@ boundedVarsSetAlg = groupUnionAlgebra boundedVarsCalcAlg unionF emptyF
     unionF i a1 a2 = return $ M.insert i D.empty $ M.union a1 a2
     emptyF i = return $ M.fromList [(i,D.empty)]
 
+-- | Algebra for producing a map indicating which variables are bound by
+-- a quantifier at each point in a Lambda calculus strucute
 allShadowedBaseAlg :: (LambdaCalculus a alg, Monad m) => alg m a (M.Map Int (Int,Bool))
 allShadowedBaseAlg = mkGroupCalcAlgebra varF abstF baseGApp
   where
@@ -334,6 +353,8 @@ baseRedUnionAlg = unionAlgebra (mkCalcAlgebra baseVar baseAbst appF) unionF base
             foldl (\(abst -> Just (x,e1)) (abst -> Just (_,e2)) -> abstC x (unionC e1 e2)) a as
       in return $ listFold $ map unify xs
 
+-- | Algebra that converts the sequential applications of union constructors
+-- into a set of elements
 unions :: (Fold a alg, WithSets a alg, Ord a) => a -> a
 unions = runIdentity . foldM alg
   where
