@@ -28,4 +28,6 @@ t7 = App t3 t0
 
 t8 = App t4 (Abs (C.Var 2 (Arr TBool TBool)) (App (Var 2) VFalse))
 
-allExamples = [t0,t1,t2,t3,t7,t4,t8,t5,t6]
+t9 = Fix (Abs (C.Var 1 (Arr TBool TBool)) (Var 1))
+
+allExamples = [t0,t1,t2,t3,t7,t4,t8,t5,t6,t9]
