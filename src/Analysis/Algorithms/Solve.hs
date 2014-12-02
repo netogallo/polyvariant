@@ -15,13 +15,6 @@ import Control.Monad
 import Control.Monad.State
 import Control.Monad.Except
 
-emptyTerm :: SortConstraint -> Either A.Annotation E.Effect
-emptyTerm s' =
-  case s' of
-    ASort s | S.annSort s -> Left $ C.emptyG s
-    ASort s -> Right $ C.emptyG s
-    AnyAnnotation -> Left C.emptyC
-    AnyEffect -> Right C.emptyC
 
 solveIt :: (MonadError RFailure m, MonadState RContext m) =>
            Int ->

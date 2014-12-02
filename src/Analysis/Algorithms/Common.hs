@@ -31,6 +31,14 @@ data FailureContents a b c d e =
 type FailureElement = FailureContents String A.Annotation E.Effect AT.Type SortConstraint
 type RFailure = Failure [FailureElement]
 
+emptyTerm :: SortConstraint -> Either A.Annotation E.Effect
+emptyTerm s' =
+  case s' of
+    ASort s | S.annSort s -> Left $ CT.emptyG s
+    ASort s -> Right $ CT.emptyG s
+    AnyAnnotation -> Left CT.emptyC
+    AnyEffect -> Right CT.emptyC
+
 renderFailure (fa,fb,fc,fd,fe) f =
   case f of
     C1 a -> fa a

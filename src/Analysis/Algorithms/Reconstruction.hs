@@ -156,12 +156,15 @@ reconstructionF s0 = C.foldM alg
         (annOmega1,_) = M.mapEither id omega1
         omega2 = M.fromList [(ib',Left $ An.replaceFree annOmega1 psi'')]
         (annOmega2,_) = M.mapEither id omega2
+        cextra = map (\v ->
+                       let s = (\(Just w_1919) -> w_1919) $ M.lookup v fvEnv
+                       in (emptyTerm s, v)) reps
         c :: [(Either An.Annotation E.Effect, Int)]
         c = [
           (Right $ E.Var d1,d), (Right $ E.Flow (show i) (An.Var b1),d),
           (Right $ E.replaceFree omega2 $ E.replaceFree omega1 phi0, d),
           (Left $ An.replaceFree annOmega2 $ An.replaceFree annOmega1 psi'', b)
-          ] ++ c1
+          ] ++ c1 ++ cextra
         t0 = At.replaceFree omega2 $ At.replaceFree omega1 t'
 --        t' = At.normalize t0
         freeVs = D.map fst $ D.filter (not . C.bound) $ At.vars t'
