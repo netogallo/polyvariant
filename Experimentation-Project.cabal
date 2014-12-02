@@ -43,6 +43,7 @@ executable Experimentation-Project
                        ,ghcjs-base >= 0.1
                        ,ghcjs-dom >= 0.1
                        ,safe >= 0.3
+--  cpp-options:         -DNoFixWorkaround
   }else{
   build-depends:       base >=4.7 && <4.8
                        ,mtl >= 2.2.1

@@ -1,4 +1,4 @@
-{-# Language FlexibleContexts, MultiWayIf #-}
+{-# Language FlexibleContexts, MultiWayIf, CPP #-}
 module Analysis.Algorithms.Reconstruction where
 
 import Analysis.Algorithms.Completion
@@ -159,12 +159,17 @@ reconstructionF s0 = C.foldM alg
         cextra = map (\v ->
                        let s = (\(Just w_1919) -> w_1919) $ M.lookup v fvEnv
                        in (emptyTerm s, v)) reps
-        c :: [(Either An.Annotation E.Effect, Int)]
-        c = [
+        c0 :: [(Either An.Annotation E.Effect, Int)]
+        c0 = [
           (Right $ E.Var d1,d), (Right $ E.Flow (show i) (An.Var b1),d),
           (Right $ E.replaceFree omega2 $ E.replaceFree omega1 phi0, d),
           (Left $ An.replaceFree annOmega2 $ An.replaceFree annOmega1 psi'', b)
-          ] ++ c1 ++ cextra
+          ] ++ c1
+#ifndef NoFixWorkaround
+        c = c0 ++ cextra
+#else
+        c = c0
+#endif
         t0 = At.replaceFree omega2 $ At.replaceFree omega1 t'
 --        t' = At.normalize t0
         freeVs = D.map fst $ D.filter (not . C.bound) $ At.vars t'
@@ -173,7 +178,11 @@ reconstructionF s0 = C.foldM alg
           in if | D.member v freeVs && S.annSort s -> M.insert v (Left bRep) o3
                 | D.member v freeVs -> M.insert v (Right dRep) o3
                 | otherwise -> o3
+#ifndef NoFixWorkaround
         omega3 = foldr cata M.empty reps
+#else
+        omega3 = M.empty
+#endif
         t = At.normalize $ At.replaceFree omega3 t0
       modify (history %~ (FixLog ((t,t0),c,i,b,d) (t1',tx) omega1 omega2 :))
       return (t, b, d, c)
