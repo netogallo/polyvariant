@@ -160,6 +160,16 @@ replaceFree rep type' = runIdentity $ foldTypeM alg type'
     alg = algebra{
       fann=annF,farr=arrF}
 
+vars :: Type -> D.Set (Int,C.Boundness)
+vars = runIdentity . C.foldM alg
+  where
+    arrF _ s1 eff s2 = return $ D.unions [s1,s2,E.vars eff]
+    annF _ s a = return $ D.unions [s,A.vars a]
+    alg = (C.baseAbstVarsAlg :: Algebra Identity Type (D.Set (Int,C.Boundness))){
+      farr = arrF,
+      fann = annF
+      }
+
 reduce e = if reduce' e == e then e else reduce $ reduce' e
 
 normalize = reduce . renameByLambdas

@@ -318,17 +318,21 @@ baseIncAlg i vars = (alg vars)
     alg vars = mkCalcAlgebra (fvar vars) (fabs vars) baseApp
 
 -- | Algebra to list all the variables of an expression
-baseVarsAlg :: (Monad m, LambdaCalculus a alg) => alg m a (D.Set (Int,Boundness))
-baseVarsAlg = mkGroupCalcAlgebra var abst app
+baseAbstVarsAlg :: (Monad m, WithAbstraction a alg) => alg m a (D.Set (Int,Boundness))
+baseAbstVarsAlg = groupAbstAlgebra groupAlgebra abstF
   where
-    var _ v = return (D.singleton (v,Free))
-    abst _ v s = do
+    abstF _ v s = do
       let bounder (v',boundness)
             | S.name v == v' = (v',Bound)
             | otherwise = (v',boundness)
       return $ D.insert (S.name v, Bound) . D.map bounder $ s
+    
+-- | Algebra to list all the variables of an expression
+baseVarsAlg :: (Monad m, LambdaCalculus a alg) => alg m a (D.Set (Int,Boundness))
+baseVarsAlg = groupCalcAlgebra baseAbstVarsAlg var app
+  where
+    var _ v = return (D.singleton (v,Free))
     app _ a1 a2 = return $ D.union a1 a2
-
 
 groupAbst a b =
   case (a,b) of

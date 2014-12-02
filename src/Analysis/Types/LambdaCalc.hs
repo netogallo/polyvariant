@@ -8,6 +8,7 @@ import qualified Analysis.Types.Sorts as S
 import Control.Monad.Except
 import qualified Analysis.Types.Effect as E
 import qualified Analysis.Types.Annotation as A
+import qualified Data.Set as D
 
 data LambdaCalc t =
   Var Int
@@ -235,31 +236,31 @@ reduce whnf e = (reduceStep whnf e) >>= go e
       | e1 == e2 = return (e2,effs)
       | otherwise = do
         (e2',effs') <- reduceStep whnf e2
-        go e2 (e2',effs ++ effs')
+        go e2 (e2',D.unions [effs, effs'])
 
 reduceStep whnf c =
   case c of
     AApp i e1@(AFix _ _) e2 ->
-      if whnf then return (AApp i e1 e2,[]) else doApp i e1 e2
+      if whnf then return (AApp i e1 e2,D.empty) else doApp i e1 e2
     AApp i e1 e2 -> doApp i e1 e2
     AIf i cond yes no -> do
       (cond',eff1) <- reduce whnf cond
       case cond' of
         ATrue i' -> do
           (yes',eff2) <- reduce whnf yes
-          return $ (yes',eff1 ++ [E.Flow (show i) (A.Label (show i'))] ++ eff2)
+          return $ (yes',D.unions [eff1, D.singleton (E.Flow (show i) (A.Label (show i'))), eff2])
         AFalse i' -> do
           (no',eff3) <- reduce whnf no
-          return $ (no',eff1 ++ [E.Flow (show i) (A.Label (show i'))] ++ eff3)
+          return $ (no',D.unions [eff1, D.singleton (E.Flow (show i) (A.Label (show i'))), eff3])
         _ -> throwError $ "Cannot reduce: " ++ show c
     (AFix i e) -> do
       (e',effs1) <- reduce whnf e
       case e' of
         (AAbs i' v ex) -> do
           (e'',effs2) <- reduce True $ replace (C.name v) ex (AFix i e)
-          return (e'',effs1 ++ [E.Flow (show i) (A.Label (show i'))] ++ effs2)
+          return (e'',D.unions [effs1, D.singleton (E.Flow (show i) (A.Label (show i'))), effs2])
         _ -> throwError $ "Cannot reduce: " ++ show c
-    e -> return (e,[])
+    e -> return (e,D.empty)
   where
     doApp i e1 e2 = do
       (e1',effs1) <- reduce whnf e1
@@ -267,9 +268,10 @@ reduceStep whnf c =
       case e1' of
         (AAbs i' v e) -> do
           (e3,effs3) <- reduce whnf $ replace (C.name v) e e2'
-          return (e3, (E.Flow (show i) (A.Label (show i'))) : effs1 ++ effs2 ++ effs3)
+          return (e3, D.unions [D.singleton (E.Flow (show i) (A.Label (show i'))),
+                                effs1, effs2, effs3])
         _ -> throwError $ "Cannot reduce: " ++ show c
   
 
-reduceExpr :: (Show t,Eq t) => LambdaCalc t -> Either String (ALambdaCalc t,[E.Effect])
+reduceExpr :: (Show t,Eq t) => LambdaCalc t -> Either String (ALambdaCalc t,D.Set E.Effect)
 reduceExpr = runExcept . reduce False . addLabels

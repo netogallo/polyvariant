@@ -62,7 +62,7 @@ completion' cont (T.Arr t1 t2) c0 = completion' cont' t1 [] >>= cont
 completion :: (Monad m, Functor m) =>
               T.Type
               -> [S.FlowVariable]
-              -> StateT RContext m (A.Type, [S.FlowVariable], [(Int,S.Sort)])
+              -> StateT RContext m (A.Type, A.Type, [S.FlowVariable], [(Int,S.Sort)])
 completion ty fv = do
   (t,ss,freshVars) <- completion' return ty fv
-  return (A.normalize t,ss,freshVars)
+  return (A.normalize t,t,ss,freshVars)

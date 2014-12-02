@@ -20,7 +20,7 @@ t3 = Abs (C.Var 1 (Arr TBool TBool)) (
 
 t4 = Abs (C.Var 1 (Arr (Arr TBool TBool) TBool)) (If (App (Var 1) (Abs (C.Var 2 TBool) VTrue)) VFalse VTrue)
 
-t5 = Fix (Abs (C.Var 1 (Arr TBool TBool)) (Abs (C.Var 2 TBool) (If VFalse (App (Var 1) VTrue) VTrue)))
+t5 = Fix (Abs (C.Var 1 (Arr TBool TBool)) (Abs (C.Var 2 TBool) (If (Var 2) (App (Var 1) VFalse) VTrue)))
 
 t6 = App t5 VTrue
 

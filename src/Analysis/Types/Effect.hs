@@ -221,6 +221,7 @@ increment i eff' = runIdentity $ C.foldM alg eff'
       fflow = flow
       }
 
+
 annApplication fun@(Abs v a1) a2 = increment (-1) $ runIdentity $ C.foldM alg a1
   where
     rep ann = 
@@ -236,8 +237,14 @@ annApplication fun@(Abs v a1) a2 = increment (-1) $ runIdentity $ C.foldM alg a1
       fappAnn = appAnn,
       fflow = flow
       }
-
 annApplication a1 a2 = AppAnn a1 a2
+
+findFlowsByExpr ann = runIdentity . (foldEffectM alg)
+  where
+    flowF _ s ann'
+      | ann' == ann = return $ D.singleton (Flow s ann')
+      | otherwise = return D.empty
+    alg = (C.groupAlgebra :: Algebra Identity Effect (D.Set (Effect))){fflow = flowF}
 
 application fun@(Abs _ a1) a2 = increment (-1) $ runIdentity $ C.foldM (C.baseAppAlg fun a2) a1
 application a1 a2 = App a1 a2
