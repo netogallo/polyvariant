@@ -159,13 +159,20 @@ clearMessages webUi = do
   msgsDiv <- messagesDiv webUi
   htmlElementSetInnerHTML msgsDiv ("" :: String)
 
-appendMessage webUi msg = do
+appendPlainMessage webUi msg = do
   msgsDiv <- messagesDiv webUi
+  htmlElementSetInnerHTML msgsDiv msg
+
+appendRawMessage webUi msg = do
+  msgsDiv <- messagesDiv webUi
+  _ <- nodeAppendChild msgsDiv (Just msg)
+  return ()
+
+appendMessage webUi msg = do
   (Just doc) <- currentDocument
   (Just e') <- documentCreateElement doc ("p" :: String)
   htmlElementSetInnerHTML (castToHTMLParagraphElement e') (msg :: String)
-  _ <- nodeAppendChild msgsDiv (Just e')
-  return ()
+  appendRawMessage webUi e'
 
 renderReduction webUi term = do
   redDiv <- redCalcDiv webUi
@@ -176,6 +183,13 @@ renderReduction webUi term = do
       (Right red) -> htmlElementSetInnerHTML redDiv $ T.unpack $ T.concat [
         "$$", R.render (texy red :: LaTeX), "$$"]
 
+renderErrorMsgs (Failure i msg) =
+  "<div>Error occured in expression labeled <b>@" ++ show i ++ "</b>:&nbsp;</div>"
+  ++ (concat $ map (++" ") $ map (renderFailure f) msg)
+  where
+    rend e = T.unpack $ T.concat ["$$",R.render (texy e :: LaTeX),"$$"]
+    f = (\x -> "<div>" ++ x ++ "</div>",rend,rend,rend,rend)
+
 compile webUi = do
   calc <- readMay <$> (calcInput webUi >>= htmlTextAreaElementGetValue)
   calcDiv <- calcRender webUi
@@ -184,20 +198,24 @@ compile webUi = do
   clearMessages webUi
   logs <- logDivs webUi
   let result = calc >>= Just . reconstruction
+      renderCtx ctx =
+        mapM_ (\e -> do
+                  el <- renderEntry e
+                  mapM_ (\l -> renderEntry e >>= nodeAppendChild l . Just) logs
+                  return ()) $ _history ctx
   case result of
     Just (Right (ty,eff),ctx) -> do
       htmlElementSetInnerHTML calcDiv $ T.unpack $ T.concat ["$$",R.render $ (texy ((\(Just w_1919) -> w_1919) calc) :: LaTeX),"$$"]
       htmlElementSetInnerHTML typeDiv $ T.unpack $ T.concat ["$$",R.render $ (texy ty :: LaTeX),"$$"]
       mapM_ (flip htmlElementSetInnerHTML ("" :: String)) logs
-      mapM_ (\e -> do
-                el <- renderEntry e
-                mapM_ (\l -> renderEntry e >>= nodeAppendChild l . Just) logs
---                navButton e logs
-                return ()) $ _history ctx
+      renderCtx ctx
       htmlElementSetInnerHTML effectsDiv $ T.unpack $ T.concat [
         "$$",R.render (texy eff :: LaTeX),"$$"]
+    Just (Left err,ctx) -> do
+      htmlElementSetInnerHTML calcDiv $ T.unpack $ T.concat ["$$",R.render $ (texy ((\(Just w_1919) -> w_1919) calc) :: LaTeX),"$$"]
+      appendPlainMessage webUi $ renderErrorMsgs err
+      renderCtx ctx
     Nothing -> appendMessage webUi ("Could not parse (read) the given expression." :: String)
-    _ -> return ()
   case calc of
     Nothing -> return ()
     Just term' -> renderReduction webUi term'

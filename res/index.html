@@ -25,7 +25,7 @@
     <p> This is an implementation of the analysis named <a href="http://dl.acm.org/citation.cfm?id=1863554">Polyvariant Flow Analysis with Higher-ranked Polymorphic Types and Higher-order Effect Operators</a> created by Jurriaan Hage and Stefan Holdermans. </p>
     <div>
       <h3> Grammar </h3>
-      <p><b>Expression</b> ::= Variable | Abstraction | Application | Value | IF-Statement</p>
+      <p><b>Expression</b> ::= Variable | Abstraction | Application | Value | IF-Statement | Fixpoint</p>
       <p><b>Type</b> ::= BoolType | Arrow</p>
       <table border="1">
 	<tr>
@@ -47,6 +47,10 @@
 	  <td> Application ::=&nbsp;</td><td> $$\mathrm{Expression}\ \mathrm{Expression}$$ </td> <td> App Expression Expression </td>
 	</tr>
 	<tr>
+	  <td> Fixpoint ::=&nbsp;</td><td> $$\mathtt{fix}\ \mathrm{Expression}$$ </td>
+	  <td> Fix Expression </td>
+	</tr>
+	<tr>
 	  <td> BoolType ::=&nbsp;</td><td> $$\mathtt{B}$$ </td> <td> TBool </td>
 	</tr>
 	<tr>
@@ -60,6 +64,9 @@
     </div>
     <input type="submit" id="compileInput" value="compile"></input>
     <div id="examplesDiv"></div>
+    <h4>Messages</h4>
+    <div id="messages">
+    </div>
     <h4>Annotated Type</h4>
     <div id="typeRenderDiv"></div>
     <h4>Effects</h4>
@@ -68,9 +75,6 @@
     <div id="calcRenderDiv"></div>
     <h4>Reduced Expression</h4>
     <div id="redCalcRenderDiv"></div>
-    <h4>Messages</h4>
-    <div id="messages">
-    </div>
     <h4>Log</h4>
     <div id="log1">
       <div class="logNav" style="float:left">
@@ -81,6 +85,15 @@
       </div>
     </div>
     <style type="text/css">
+      #messages{
+        display: table-row;
+        color: #ce451e;
+      }
+      
+      #messages div {
+        display: table-cell;
+        margin-right: 20px;
+      }
       .logEven h4{
       background-color: #f0f0f0;
       }

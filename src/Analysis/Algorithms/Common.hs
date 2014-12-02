@@ -31,6 +31,14 @@ data FailureContents a b c d e =
 type FailureElement = FailureContents String A.Annotation E.Effect AT.Type SortConstraint
 type RFailure = Failure [FailureElement]
 
+renderFailure (fa,fb,fc,fd,fe) f =
+  case f of
+    C1 a -> fa a
+    C2 b -> fb b
+    C3 c -> fc c
+    C4 d -> fd d
+    C5 e -> fe e
+
 class FailureMessage a where
   toMsg :: a -> FailureElement
 
@@ -63,6 +71,11 @@ data SortConstraint =
   | AnyAnnotation
   | ASort S.Sort
   deriving (Show,Eq)
+
+instance Texy SortConstraint where
+  texy (ASort s) = texy s
+  texy AnyEffect = forall <> delta <> stexy "." <> delta
+  texy AnyAnnotation = forall <> beta <> stexy "." <> beta
 
 isAnnConstraint c =
   case c of
@@ -151,16 +164,6 @@ renderLog l =
             (theta !: stexy "2",texy rep2)
           ]
   in rows
-
-#ifdef COMPGHC
-
--- instance Texy LogEntry where
---   texy e =
---     let rows = renderLog e :: [LaTeX]
---         mkTableRow s (e,v) = e Text.LaTeX.Base.& v <> lnbk <> s
---     in tabular Nothing [CenterColumn,CenterColumn] (foldl mkTableRow mempty rows)
-
-#endif    
 
 -- | This is the context under which the R algorithm is run. It contains
 -- information indicating the an index for fresh variables,
