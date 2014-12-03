@@ -14,6 +14,16 @@
 This document describes the implementation of the analysis named: "Polyvariant Flow Analysis with Higher-ranked Polymorphic Types and Higher-order Effect Operators". This is a flow analysis for a higher order language which uses higher-ranked types to increase the presicion. The result of the analysis is delivered as an annotated type system for a simply typed lambda calculus. The major limitation of the analysis is that it does not support polymorphic types.
 \\\\
 The analysis has been implemented in the Haskell programming language and also includes an interactive web interface that can be compiled using GHCJS\cite{GHCJS}. Alternatively, the analysis can be compiled with the GHC compiler and the input is read form the standard input and the ouput is a Latex document with the results of the analysis.
+\section{Notation conventions}
+Notation conventions are used in this document, several are borrowed from the paper defining the analysis \cite{analysis}. Below they are described:
+\begin{itemize}
+\item $\beta_i$ will denote variables for annotation expressions in definitions, pseudo-code or references to \cite{analysis}.
+\item $\delta_i$ will denote variable for effect expressions in definitions, pseudo-code or references to \cite{analysis}.
+\item $\overline{x_i}$ will denote a sequence of $x$
+\item $\beta^{i}$ will denote variables for annotations in expressions used as examples. When $i>0$ it will refer to bound variables (even if the binder is not visible because a sub-expression of a larger expression is being shown) and when $i<0$ it will refer to free variables.
+\item $\beta^{i}$ will denote variables for effects in expressions used as examples. When $i>0$ it will refer to bound variables (even if the binder is not visible because a sub-expression of a larger expression is being shown) and when $i<0$ it will refer to free variables.
+\item $t*t_1$ denotes the application of $t$ to the argument $t_1$ in examples. Space will never be an application in the sample expressions (but it is in pseudo-code).
+\end{itemize}
 \section{File Structure}
 The code is divided in three modules: algorithms, types and web. The web group only contains details about manipulating dom elements and interfacing with the other two containers so it is not interesting and will not be explained any futher.
 \section{Types}
@@ -67,7 +77,7 @@ Using this notion of depth of an abstraction, it is possible to define a nameing
     where
       increment' $(\lambda x.t)$ = $\lambda (x+i).$ increment' $t$
       increment' $(t_1 t)$ = (increment' $t_1$) (increment' $t$)
-      increment' $x$ when $x \in$ freeVariables(t) = x
+      increment' $x$ | $x \in$ freeVariables(t) = x
       increment' $x$ = x + i
 \end{lstlisting}
 A basic algebra that performs this increment is is provided in the \verb+Analysis.Types.Common+ package and is called \verb+baseIncAlg+. This algebra implements the common requirements for a lambda calculus and can be extended to handle more complex structures. Now assuming that one has two terms \verb+t1+ and \verb+t2+ with all variables named according to the depth of the binder where they wehere introduced. The application \verb+t1 t2+ is performed by:
@@ -162,7 +172,7 @@ Theese types are then matched to produce a replacement. Matching proceeds by add
 \beta_0\overline{\beta_j}=\beta{}^{-25}*\beta{}^{1} & \psi_2=\left\{\beta{}^{-25}*\left\{\right\};\;{}\textbf{@9};\;{}\beta{}^{-25}*\textbf{@8}\right\}
 \end{array}
 \]
-At this stage, the substitution $\Omega$ is extended with $\left[\delta^{-24}\to{}\left(\lambda{}\beta{}^{1}:\mathtt{A}\;{}.\;{}\left\{\left(\textbf{@4},\beta{}^{1}\right);\;{}\left(\textbf{@6},\beta{}^{-23}\right);\;{}\delta{}^{-24}*\textbf{@8}\right\}\right)\right]$ and\\ $\left[\beta^{-25}\to{}\left(\lambda{}\beta{}^{1}:\mathtt{A}\;{}.\;{}\left\{\beta{}^{-25}*\left\{\right\};\;{}\textbf{@9};\;{}\beta{}^{-25}*\textbf{@8}\right\}\right)\right]$. Both of theese cases substitute a free variable with an expression that contains the variable. One simple solution seems to be eliminating the exprssions that contain $\delta^{-24}$ and $\beta^{-25}$. For the annotation signature that would give the correct result but for the effect signature, the consumption of {\bf @8} by `some` expression which clearly happens in the expression labeled {\bf @6}. The second alternative one could consider is quantifying over thoose variables which would result with the fixpoint expression:
+At this stage, the substitution $\theta$ is extended with $\left[\delta^{-24}\to{}\left(\lambda{}\beta{}^{1}:\mathtt{A}\;{}.\;{}\left\{\left(\textbf{@4},\beta{}^{1}\right);\;{}\left(\textbf{@6},\beta{}^{-23}\right);\;{}\delta{}^{-24}*\textbf{@8}\right\}\right)\right]$ and\\ $\left[\beta^{-25}\to{}\left(\lambda{}\beta{}^{1}:\mathtt{A}\;{}.\;{}\left\{\beta{}^{-25}*\left\{\right\};\;{}\textbf{@9};\;{}\beta{}^{-25}*\textbf{@8}\right\}\right)\right]$. Both of theese cases substitute a free variable with an expression that contains the variable. One simple solution seems to be eliminating the exprssions that contain $\delta^{-24}$ and $\beta^{-25}$. For the annotation signature that would give the correct result but for the effect signature, the consumption of {\bf @8} by `some` expression which clearly happens in the expression labeled {\bf @6}. The second alternative one could consider is quantifying over thoose variables which would result with the fixpoint expression:
 \[
 \mathbf{fix}\;{}\left(\lambda{}x^{1}:\mathtt{B}\to{}\mathtt{B}\;{}.\;{}\left(\lambda{}x^{2}:\mathtt{B}\;{}.\;{}\left(\mathbf{if}\;{}x^{2}\;{}\mathbf{then}\;{}\left(x^{1}*\left(\mathbf{False}\right)^{\mathit{@8}}\right)^{\mathit{@6}}\;{}\mathbf{else}\;{}\left(\mathbf{True}\right)^{\mathit{@9}}\right)^{\mathit{@4}}\right)^{\mathit{@3}}\right)^{\mathit{@2}}
 \]
@@ -197,4 +207,39 @@ and the whole expression results in:
 \phi=\left\{\left(\textbf{@1},\textbf{@2}\right);\;{}\left(\textbf{@4},\textbf{@10}\right);\;{}\left(\textbf{@4},\textbf{@8}\right);\;{}\left(\textbf{@6},\textbf{@3}\right);\;{}\left(\textbf{@0},\textbf{@3}\right)\right\}
 \end{array}
 \]
+The second adjustment that was done to the algorithm concerns dealing with infinite recursion. Consider fixing the identity function:
+\[
+\left(\mathbf{fix}\;{}\left(\lambda{}x^{1}:\mathtt{B}\to{}\mathtt{B}\;{}.\;{}x^{1}\right)^{\mathit{@1}}\right)^{\mathit{@0}}
+\]
+The analysis as defined in the paper will give the type:
+\[
+\left(\forall{}\beta{}^{1}:\mathtt{A}\;{}.\;{}\left(\left(\mathtt{B}\right)^{\beta{}^{1}}\right)\xrightarrow{\delta{}^{-10}*\beta{}^{1}}\left(\mathtt{B}\right)^{\beta{}^{-11}*\beta{}^{1}}\right)^{\beta{}^{-9}}
+\]
+The variables $\beta^{-11}$ and $\delta^{-10}$ don't concern us here since they are taken care of by the previous adjustment. However, the variable $\beta^{-9}$ remains free. This is the analysis's way of saying, I don't know what comes out of this. Effectively, this function is an infinite loop and nothing comes out of it. The reason why this happens is that the only constraints given to the fresh $\beta$ variable created in the \verb+fix+ branch of the reconstruction algorithm are variables created during the instantiation phase. It is straightforward to solve this problem: include the fresh variables created during instantiation among the constraints and constrain them to have the empty element included in them. The empty element is defined per sort as follow:
+\begin{lstlisting}[
+  mathescape,
+  columns=fullflexible,
+  basicstyle=\fontfamily{lmvtt}\selectfont,
+]
+  empty $\mathtt{A}$ = $\emptyset$
+  empty $\mathtt{E}$ = $\emptyset$
+  empty $\lambda \beta .\beta_1$ = $\lambda \beta.$empty $\beta_1$
+  empty $\lambda \delta .\delta_1$ = $\lambda \beta.$empty $\delta_1$
+\end{lstlisting}
+With the addition of this constraint, the function above now has type:
+\[
+\left(\forall{}\beta{}^{1}:\mathtt{A}\;{}.\;{}\left(\left(\mathtt{B}\right)^{\beta{}^{1}}\right)\xrightarrow{\left\{\right\}}\left(\mathtt{B}\right)^{\beta{}^{1}}\right)^{\left\{\right\}}
+\]
+It indicates that the expression will not return an element constructed anywhere. It is debatable what should be the right answer here, but for practical purposes, one can expect that the expression will effectively never deliver an answer and nothing will flow out of it.
+\subsection{Completion}
+The completion algorithm is implemented in continuation passing style. The \verb+completion'+ funciton takes as first argument a continuation function which will eventually return the completed type and a list of constant values for the constraint solver. The implementation is done very similarly as described in the original paper except that recursive calls are replaced by continuations. The execution (for the arrow case) proceeds by first performing the recursive call to completion and then applying the result to a continuation that corresponds to the remainder of the body of the completion algorithm (denoted by \verb+cont''+ in the implementation). It uses the underlying state monad to generate fresh variables and this has the convenience of keeping track of the sort that the free variables are assigned.
+\\\\
+The role of the completion algorithm is to annotate a type without annotations. While doing so a list of variables that should remain constant while solving constraints is generated and the reconstruction alorithm passes theese variables to the constraint solver.
+\subsection{Join}
+The join algorithm takes care of joining two types into one by matching them on their syntactic structure and generating a type that contains the effects and annotations of both of its arguments. The original pseudo-code is very declarative since it requires that variables bound by quantifiers to be equal up to sorting and alpha-renaming. Fortunately, for normalized types, this happens automatically thus the implementation of the algorithm looks almost exact line by line to the pseudo-code. One of the additions of this implementation is that its first argument is the label where the joining is being performed. This is only used for error reporting.
+\subsection{Matching}
+The matching algorithm also benefits from the assumption of having its arguments normalized. This allows an almost line by line translationn (mostly for the matching of patterns). Two helper functions are defined, namely \verb+getChis+ and \verb+getBetas+, which extract the arguments and function of an application. The result, instead of being a function, as done in the pseudo-code, is a map mapping variable names to arguments. The map is indexed by integers. This is possible since the replacements only involve free variables and each time a free variable is generated, a unique index is given to it. The type of the values of the map is \verb+Either Annotation Effect+. This is because the variable for which the replacement applies is an annotation or an effect. This allows it to be used as a replacement for annotation arguments by simply removing all the effects from the map. The application of replacements are performed by the algebra \verb+baseReplaceAlg+ defined in \verb+Analysis.Types.Common+. This algebra takes a map indexed by variable names and replacements for the variable and returns an expression with those replacements applied.
+\subsection{Instantiation}
+This algorithm removes the outter most quantifiers of a type and replaces the variables bound by those quantifiers with free fresh variables. Not much can be said about the algorithm since it is a line by line translation of the pseudo-code. Free variables are obtained using the context which keeps track of the sort given to the variables.
+\subsection{Constraint Solving}
 \end{document}

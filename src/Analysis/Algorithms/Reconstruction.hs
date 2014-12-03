@@ -68,6 +68,37 @@ calcGammas s0 = C.foldM alg
              $ s
     alg = (groupAlgebraInit s0){fabs=abs,fvar=var,fapp=app, ffix=fixF}
 
+getQuantifiedVars t =
+  let go effs v t' =
+        let ((anns,effs'),q0) = getQuantifiedVars t'
+        in ((anns,D.union effs effs'),v : q0)
+  in case t of
+    At.Arr _ effs (At.Forall v t') -> go (D.singleton effs) v t'
+    At.Arr _ effs (At.Ann (At.Forall v t') _) -> go (D.singleton effs) v t'
+    At.Forall v t' -> go D.empty v t'
+    At.Ann (At.Forall v t') _ -> go D.empty v t'
+    At.Arr _ eff ann -> ((D.singleton ann,D.singleton eff),[])
+    At.Ann (At.Arr _ eff ann) _ -> ((D.singleton ann,D.singleton eff),[])
+    _ -> ((D.empty,D.empty),[])
+
+buildAbstraction ex0 = foldr (\v s -> C.abstC v s) ex0
+
+mkFixReplacement anns effs qVars =
+  let aVars = D.map fst (D.unions (D.toAscList (D.map At.vars anns)))
+              `D.intersection` (D.fromList $ map S.name qVars)
+      eVars = D.unions $ map (flip E.findFlowsByExpr (E.Set effs) . An.Var . S.name) qVars
+      mkAbst e = buildAbstraction e qVars
+  in (mkAbst (An.Set $ D.map An.Var aVars),mkAbst (E.Set eVars))
+
+mkFixReplacements anns effs qVars' =
+  let (_,_,bReps,dReps) = foldr cata (2 :: Int,[],M.empty,M.empty) qVars'
+  in (bReps,dReps)
+  where
+    cata v (k,qVars,bReps,dReps) =
+      let
+        (bRep,dRep) = mkFixReplacement anns effs (v:qVars)
+      in (k+1,v:qVars,M.insert k bRep bReps,M.insert k dRep dReps)
+
 reconstructionF :: (MonadError RFailure m, MonadState RContext m, C.Fold a (Algebra T.Type), Functor m, Monad m, Applicative m) =>
                    RState -> a -> m (At.Type, Int, Int, [(Either An.Annotation E.Effect, Int)])
 reconstructionF s0 = C.foldM alg
@@ -140,13 +171,24 @@ reconstructionF s0 = C.foldM alg
       -- all expressions where the quantified variable appears in the
       -- effect and annotation signature of the functional argument
       -- of fix
-      let (bRep,dRep) = case t'' of
-            At.Forall v (At.Arr _ eff e) ->
-              let bRep' = if S.name v `D.member` D.map fst (At.vars e)
-                          then An.Abs (S.Var 1 S.Ann) (An.Var 1)
-                          else An.Abs (S.Var 1 S.Ann) An.Empty
-              in (bRep',E.Abs v (E.Set (E.findFlowsByExpr (An.Var (S.name v)) eff)))
-            _ -> (An.Abs (S.Var 1 S.Ann) An.Empty, E.Abs (S.Var 1 S.Ann) E.Empty)
+      let
+        ((anns,effs),qVars) = getQuantifiedVars t''
+        (bReps,dReps) = mkFixReplacements anns effs qVars
+        -- (bRep,dRep) =
+        --     let aVars = D.map fst (D.unions (D.toAscList (D.map At.vars anns)))
+        --                 `D.intersection` (D.fromList $ map S.name qVars)
+        --         eVars = D.unions $ map (flip E.findFlowsByExpr (E.Set effs) . An.Var . S.name) qVars
+        --         mkAbst e = buildAbstraction e qVars
+        --     in (mkAbst (An.Set $ D.map An.Var aVars),mkAbst (E.Set eVars))
+--          _ -> (An.Abs (S.Var 1 S.Ann) An.Empty, E.Abs (S.Var 1 S.Ann) E.Empty)
+        
+      -- let (bRep,dRep) = case t'' of
+      --       At.Forall v (At.Arr _ eff e) ->
+      --         let bRep' = if S.name v `D.member` D.map fst (At.vars e)
+      --                     then An.Abs (S.Var 1 S.Ann) (An.Var 1)
+      --                     else An.Abs (S.Var 1 S.Ann) An.Empty
+      --         in (bRep',E.Abs v (E.Set (E.findFlowsByExpr (An.Var (S.name v)) eff)))
+      --       _ -> (An.Abs (S.Var 1 S.Ann) An.Empty, E.Abs (S.Var 1 S.Ann) E.Empty)
       d <- getFreshIx $ ASort $ S.Eff
       b <- getFreshIx $ ASort $ S.Ann
       omega1 <- match i M.empty t'' t'
@@ -173,10 +215,12 @@ reconstructionF s0 = C.foldM alg
         t0 = At.replaceFree omega2 $ At.replaceFree omega1 t'
 --        t' = At.normalize t0
         freeVs = D.map fst $ D.filter (not . C.bound) $ At.vars t'
+        getBetaRep s = Left . (\(Just w_1919) -> w_1919) $ M.lookup (S.simpleKind s) bReps
+        getDeltaRep s = Right . (\(Just w_1919) -> w_1919) $ M.lookup (S.simpleKind s) dReps
         cata v o3 =
           let (ASort s) = (\(Just w_1919) -> w_1919) $ M.lookup v fvEnv
-          in if | D.member v freeVs && S.annSort s -> M.insert v (Left bRep) o3
-                | D.member v freeVs -> M.insert v (Right dRep) o3
+          in if | D.member v freeVs && S.annSort s -> M.insert v (getBetaRep s) o3
+                | D.member v freeVs -> M.insert v (getDeltaRep s) o3
                 | otherwise -> o3
 #ifndef NoFixWorkaround
         omega3 = foldr cata M.empty reps
@@ -184,7 +228,9 @@ reconstructionF s0 = C.foldM alg
         omega3 = M.empty
 #endif
         t = At.normalize $ At.replaceFree omega3 t0
-      modify (history %~ (FixLog ((t,t0),c,i,b,d) (t1',tx) omega1 omega2 :))
+        bReps' = map snd $ M.toList bReps
+        dReps' = map snd $ M.toList dReps
+      modify (history %~ (FixLog ((t,t0),c,i,b,d) (t1',tx) omega1 omega2 bReps' dReps' :))
       return (t, b, d, c)
 
     boolF i = do

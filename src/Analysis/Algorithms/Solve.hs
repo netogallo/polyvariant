@@ -49,16 +49,25 @@ solveIt l deps = do
         Left ann -> Left $ A.replaceFree annAnalysis ann
         Right eff -> Right $ E.replaceFree analysis eff
 
--- solve :: (Functor m, Monad m) => [(Either A.Annotation E.Effect, Int)] -> [Int] -> Int -> Int -> StateT RContext m ()
--- solve :: (MonadError RFailure m, MonadState RContext m, Functor m, Monad m)
 solve l c x b d = do
+  -- Initialize the analysis map assigning to all
+  -- variables appearing in the constraints the empty element
+  -- as result, beta and delta also start with the empty element
+  -- and the list of constants are constrained to be a subset
+  -- of themselves
   analysis <- (\x y z -> M.fromList $ x ++ y ++ z)
               <$> mapM (analysisM . snd) c
               <*> (mapM analysisM $ [b,d])
               <*> mapM analysisC x
+  -- Initialize the list of dependencies by looking at all the
+  -- free variables of an expression and making that expression
+  -- dependent on the dependencies of the free variables that
+  -- appear in it.
   deps <- return (foldl depsInit M.empty (map fst c))
               >>= return . (\s0 -> foldl depsExtend s0 c)
-              
+
+  -- Initalize the worklist by simply listing all the constraints
+  -- that need to be solved
   let worklist = D.fromList c
   (_,res) <- execStateT (solveIt l deps) (worklist,analysis)
   case ((\(Just x) -> x) $ M.lookup b res, (\(Just x) -> x) $ M.lookup d res) of
@@ -71,11 +80,18 @@ solve l c x b d = do
         toMsg " was expected to be an effect"]  
 
   where
+    -- Function that constraints constants. It looksup the
+    -- sort of the free variables in the sort environment
+    -- and creates the appropiate constraint
     analysisC v = do
       s' <- ((\(Just x) -> x) . M.lookup v) <$> use fvGammas
       return $ if isAnnConstraint s'
         then (v,Left $ A.Var v)
         else (v,Right $ E.Var v)
+    -- Function that constrains a variable to the empty element
+    -- the empty element is calculated depending on the sort
+    -- of the variable by looking it up in the free variable
+    -- environment
     analysisM v = do
       s' <- ((\(Just x) -> x) . M.lookup v) <$> use fvGammas
       return $ (v,emptyTerm s')

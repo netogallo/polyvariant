@@ -6,6 +6,11 @@ import Control.Monad.Identity
 import Control.Monad.Except
 import Analysis.Algorithms.Common
 
+-- | This is an (line by line) implementation of the J algorithm described by the analysis.
+-- It requires that both t1' and t2' arguments are normalized. Otherwise the
+-- alorithm might fail in cases where both types should be joinable. Thanks to the
+-- normalization of types, the algorithm can be implemented in a very clean
+-- fashion.
 joinTypes l t1' t2' = joinE t1' t2'
   where
     joinE t1 t2 =

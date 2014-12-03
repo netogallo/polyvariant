@@ -21,3 +21,6 @@ annSort _ = False
 
 effSort :: Sort -> Bool
 effSort = not . annSort
+
+simpleKind (Arr _ b) = 1 + simpleKind b
+simpleKind _ = 1

@@ -158,7 +158,7 @@ subAbs acons rep i v e =
 
 mkRepBase base = M.map (\e -> (e,True)) base
 
--- | Algebra to perform renaming of variables based on the depth. This
+-- | Algebra that calculates a replacement of variables by their depth. This
 -- algebra takes as first argument base'' a map of pre-established
 -- replacements. The reason is that this algebra is designed to be used
 -- in structures that bind variables contained in other structures.
@@ -271,7 +271,8 @@ shadowsBaseAlg v = mkGroupCalcAlgebra varF abstF appF
       | S.name v' == v = return $ M.map (const True) s
       | otherwise = return s
 
--- | Algebra to replace the given free variables
+-- | Algebra to replace the given free variables by the provided
+-- replacement
 baseReplaceAlg rep elm = alg
   where
     boundVars i = (\(Just w_1919) -> w_1919) $ M.lookup i $ getBoundVars elm

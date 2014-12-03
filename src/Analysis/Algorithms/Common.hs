@@ -109,7 +109,7 @@ data LogEntry =
   -- | Base results, I(tau1), Omega
   | AppLog LogResult (AT.Type,AT.Type) (M.Map Int (Either A.Annotation E.Effect))
   -- | Base results, I(tau1), Omega1, Omega2
-  | FixLog LogResult (AT.Type,AT.Type) (M.Map Int (Either A.Annotation E.Effect)) (M.Map Int (Either A.Annotation E.Effect))
+  | FixLog LogResult (AT.Type,AT.Type) (M.Map Int (Either A.Annotation E.Effect)) (M.Map Int (Either A.Annotation E.Effect)) [A.Annotation] [E.Effect]
   deriving Show
 
 logLabel e =
@@ -118,7 +118,7 @@ logLabel e =
     BasicLog l -> getLabel l
     AbstLog l _ _ _ _ _ -> getLabel l
     AppLog l _ _ -> getLabel l
-    FixLog l _ _ _-> getLabel l
+    FixLog l _ _ _ _ _-> getLabel l
 
 renderBase ((t,t'),cs,l,b,d) =
   let
@@ -165,11 +165,13 @@ renderLog l =
           [
             (theta, texy rep1)
           ]
-        FixLog r i rep1 rep2 ->
+        FixLog r i rep1 rep2 bFix dFix ->
           asRows r ++ iRender i ++
           [
             (theta !: stexy "1",texy rep1),
-            (theta !: stexy "2",texy rep2)
+            (theta !: stexy "2",texy rep2),
+            (delta !: stexy "fix",texy  dFix),
+            (beta !: stexy "fix",texy bFix)
           ]
   in rows
 
@@ -277,8 +279,3 @@ getFreshIx sort = do
   return i
 
 updateSort var sort = modify (fvGammas %~ M.insert var sort)
-
--- fresh ix s = do
---   v <- getFreshIx
---   modify (fvGammas %~ (M.map (M.insert v s)))
---   return v

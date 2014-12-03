@@ -10,6 +10,9 @@ import Analysis.Algorithms.Common
 import Control.Monad.Except
 import Control.Applicative
 
+-- | Function that extracts the arguments of an application
+-- of effects and annotations. It also returns the function
+-- being apply
 getChis eff =
   let Just (expr,arg) = E.mApp eff
       x = case arg of
@@ -21,6 +24,8 @@ getChis eff =
       let (d0,xs) = getChis expr
       in (d0,xs ++ [x])
 
+-- | Function that extracts the arguments of an application
+-- of annotations. It also returns the function being applied.
 getBetas ann =
   let A.App fun arg = ann
       b = case arg of
@@ -31,7 +36,9 @@ getBetas ann =
       let (b0,bs) = getBetas fun
       in (b0,bs++[b])
 
-
+-- | Translation (line by line) of the matching algorithm (M). Variables are named
+-- according to the nameing used in the original paper and it is recommended to
+-- use it as reference to understand the implementation of this algorithm.
 match i = match'
   where
     match' sigma t1x t2x = do
