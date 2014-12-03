@@ -274,3 +274,15 @@ reduce e = go e
       in if e == e' then e else go e'    
 
 normalize = C.unions . reduce . renameByLambdas
+
+isConstant = runIdentity . (foldEffectM alg)
+  where
+    alg = Algebra {
+      fvar = \_ _ -> return False,
+      fapp = \_ s1 s2 -> return $ s1 && s2,
+      fappAnn = \_ a an -> return $ a && A.isConstant an,
+      fabs = \_ _ s -> return s,
+      funion = \_ a b -> return $ a && b,
+      fflow = \_ l ann -> return $ A.isConstant ann,
+      fempty = \_ -> return True
+      }

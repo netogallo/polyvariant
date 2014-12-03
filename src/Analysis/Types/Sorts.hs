@@ -11,6 +11,14 @@ data FlowVariable =
   Var {name :: Int, sort :: Sort}
   deriving (Show,Ord,Eq,Read)
 
+-- | Represents the `simplified kind` of a sort
+-- by this it is meant only to count the number
+-- of abstractions at rank 0.
+-- for example:
+-- Eff -> (Eff -> Eff) -> Eff = 3
+-- Ann -> Ann = 2
+type SimpleKind = Int
+
 isAnn Ann = True
 isAnn _ = False
 

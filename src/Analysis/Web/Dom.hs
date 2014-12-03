@@ -104,12 +104,12 @@ doRedInputSel = fmap castToHTMLInputElement . pageElement doRedName
 
 logDivs ui = mapM (\e -> fmap castToHTMLDivElement $ pageElement e ui) [logName1,logName2]
 
-addExample webUi ex = do
+addExample webUi (i,ex) = do
   (Just doc) <- currentDocument
   (Just e') <- documentCreateElement doc ("input" :: String)
   let e =  castToHTMLInputElement e'
   exDiv <- examplesDiv webUi
-  elementSetAttribute e ("value" :: String) ("Example" :: String)
+  elementSetAttribute e ("value" :: String) ("Example " ++ show i)
   elementSetAttribute e ("type" :: String) ("submit" :: String)
   elementOnclick e $ lift $ do
     inputArea <- calcInput webUi
@@ -224,5 +224,5 @@ compile webUi = do
 webMain = runWebGUI $ \webUi -> do
   b <- compileInput webUi
   elementOnclick b (lift $ compile webUi)
-  mapM_ (addExample webUi) allExamples
+  mapM_ (addExample webUi) $ zip [1..] allExamples
   return ()

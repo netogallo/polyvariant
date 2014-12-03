@@ -227,3 +227,14 @@ annById i ann = execState (foldAnnM alg ann) Nothing
       unless (i /= i') $ put $ Just $ Label l
       return $ Label l
     alg = (C.byIdSetAlgebra i){flabel=labelF}
+
+isConstant = runIdentity . (foldAnnM alg)
+  where
+    alg = Algebra{
+      fvar = \_ _ -> return False,
+      fabs = \_ _ s -> return s,
+      fapp = \_ s1 s2 -> return $ s1 && s2,
+      flabel = \_ _ -> return True,
+      funion = \_  a b -> return $ a && b,
+      fempty = const $ return True
+    }

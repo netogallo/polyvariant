@@ -68,35 +68,66 @@ calcGammas s0 = C.foldM alg
              $ s
     alg = (groupAlgebraInit s0){fabs=abs,fvar=var,fapp=app, ffix=fixF}
 
+-- | Function that inspects a type after being instantiated. It is used in
+-- the fixpoint case to 1) Get the list of quantified variables 2) get
+-- the section of the type that contains all relevant annotations
+-- get all the effects that ocurr within the type. The result of this
+-- function is used by mkFixReplacements to build the replacements
 getQuantifiedVars t =
-  let go effs v t' =
-        let ((anns,effs'),q0) = getQuantifiedVars t'
-        in ((anns,D.union effs effs'),v : q0)
-  in case t of
-    At.Arr _ effs (At.Forall v t') -> go (D.singleton effs) v t'
-    At.Arr _ effs (At.Ann (At.Forall v t') _) -> go (D.singleton effs) v t'
-    At.Forall v t' -> go D.empty v t'
-    At.Ann (At.Forall v t') _ -> go D.empty v t'
-    At.Arr _ eff ann -> ((D.singleton ann,D.singleton eff),[])
-    At.Ann (At.Arr _ eff ann) _ -> ((D.singleton ann,D.singleton eff),[])
-    _ -> ((D.empty,D.empty),[])
+  case t of
+    At.Forall v (At.Arr _ eff (At.Ann t ann)) -> (v,eff,ann) : getQuantifiedVars t
+    _ -> []
 
 buildAbstraction ex0 = foldr (\v s -> C.abstC v s) ex0
 
-mkFixReplacement anns effs qVars =
-  let aVars = D.map fst (D.unions (D.toAscList (D.map At.vars anns)))
-              `D.intersection` (D.fromList $ map S.name qVars)
-      eVars = D.unions $ map (flip E.findFlowsByExpr (E.Set effs) . An.Var . S.name) qVars
-      mkAbst e = buildAbstraction e qVars
-  in (mkAbst (An.Set $ D.map An.Var aVars),mkAbst (E.Set eVars))
+mkFixReplacement qVars =
+  let
+    vars = map (^. _1) qVars
+    vVars = D.fromList $ map (An.Var . S.name) vars
+    checkAnn vars a = D.member a vars || An.isConstant a
+    filterAnn a vars =
+      case C.unions a of
+        An.Set anns -> D.filter (checkAnn vars) anns
+        _ | checkAnn vars a -> D.singleton a
+        _ -> D.empty
+    checkEff vars e =
+      case e of
+        E.Flow _ ann -> checkAnn vars ann
+        _ -> E.isConstant e
+    filterEff eff vars =
+      case C.unions eff of
+        E.Set effs -> D.filter (checkEff vars) effs
+        _ | checkEff vars eff -> D.singleton eff
+        _ -> D.empty
 
-mkFixReplacements anns effs qVars' =
-  let (_,_,bReps,dReps) = foldr cata (2 :: Int,[],M.empty,M.empty) qVars'
+    aVars = foldl (\_ (_,_,ann) -> filterAnn ann vVars) D.empty qVars
+    eVars = foldl (\_ (_,eff,_) -> filterEff eff vVars) D.empty qVars
+
+      -- D.map fst (D.unions (D.toAscList (D.map At.vars anns)))
+      --         `D.intersection` (D.fromList $ map S.name qVars)
+      -- eVars = D.unions $ map (flip E.findFlowsByExpr (E.Set effs) . An.Var . S.name) qVars
+    mkAbst e = buildAbstraction e vars
+  in (mkAbst (An.Set aVars),mkAbst (E.Set eVars))
+
+-- | Function to obtain the functions that will be used to replace the free variables
+-- that appear in fixpoints. The free variables are created because the matching algorithm
+-- creates a replacement for free variables that contains the variables themselves. To obtain
+-- the replacements for those free variables, the annotations and effects that appear in the
+-- type are inspected for expressions that contain any of the quantified variables. Then
+-- an abstraction over all quantified variables is defined having as body all expressions
+-- where the variables of the abstraction ocurrs. This is preformend incrementally, ie.
+-- the first abstraction contains the variable bound by the innermost quantifier, the
+-- second abstraction the variable bound by the innermost and the second innermost quantifier
+-- and so on.
+mkFixReplacements :: [(S.FlowVariable,E.Effect,An.Annotation)] -- | The quantified variables in the order of bounding
+                  -> (M.Map S.SimpleKind An.Annotation,M.Map S.SimpleKind E.Effect)
+mkFixReplacements qVars' =
+  let (_,_,bReps,dReps) = foldl cata (2 :: Int,[],M.empty,M.empty) qVars'
   in (bReps,dReps)
   where
-    cata v (k,qVars,bReps,dReps) =
+    cata (k,qVars,bReps,dReps) v =
       let
-        (bRep,dRep) = mkFixReplacement anns effs (v:qVars)
+        (bRep,dRep) = mkFixReplacement (qVars ++ [v])
       in (k+1,v:qVars,M.insert k bRep bReps,M.insert k dRep dReps)
 
 reconstructionF :: (MonadError RFailure m, MonadState RContext m, C.Fold a (Algebra T.Type), Functor m, Monad m, Applicative m) =>
@@ -172,23 +203,8 @@ reconstructionF s0 = C.foldM alg
       -- effect and annotation signature of the functional argument
       -- of fix
       let
-        ((anns,effs),qVars) = getQuantifiedVars t''
-        (bReps,dReps) = mkFixReplacements anns effs qVars
-        -- (bRep,dRep) =
-        --     let aVars = D.map fst (D.unions (D.toAscList (D.map At.vars anns)))
-        --                 `D.intersection` (D.fromList $ map S.name qVars)
-        --         eVars = D.unions $ map (flip E.findFlowsByExpr (E.Set effs) . An.Var . S.name) qVars
-        --         mkAbst e = buildAbstraction e qVars
-        --     in (mkAbst (An.Set $ D.map An.Var aVars),mkAbst (E.Set eVars))
---          _ -> (An.Abs (S.Var 1 S.Ann) An.Empty, E.Abs (S.Var 1 S.Ann) E.Empty)
-        
-      -- let (bRep,dRep) = case t'' of
-      --       At.Forall v (At.Arr _ eff e) ->
-      --         let bRep' = if S.name v `D.member` D.map fst (At.vars e)
-      --                     then An.Abs (S.Var 1 S.Ann) (An.Var 1)
-      --                     else An.Abs (S.Var 1 S.Ann) An.Empty
-      --         in (bRep',E.Abs v (E.Set (E.findFlowsByExpr (An.Var (S.name v)) eff)))
-      --       _ -> (An.Abs (S.Var 1 S.Ann) An.Empty, E.Abs (S.Var 1 S.Ann) E.Empty)
+        qVars = getQuantifiedVars t''
+        (bReps,dReps) = mkFixReplacements qVars
       d <- getFreshIx $ ASort $ S.Eff
       b <- getFreshIx $ ASort $ S.Ann
       omega1 <- match i M.empty t'' t'
