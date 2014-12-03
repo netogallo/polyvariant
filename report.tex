@@ -86,7 +86,7 @@ A basic algebra that performs this increment is is provided in the \verb+Analysi
 \item Perfroming the application (as usual)
 \item Decrementing the variables of the result by one
 \end{enumerate}
-This notion of application allows lambda terms to be named according to the depths and then perform reductions such that terms will reduce to the same terms. It is still the case that terms containing unions have to be ordered in some uniform way to perform equality checks. Fortunately, using the derived \verb+Ord+ instance from GHC, the ordering works as needed. This is evidenced by the tests included in the package Analysis.Types which live in the folder test.
+This notion of application allows lambda terms to be named according to the depths and then perform reductions such that terms will reduce to the same terms. It is still the case that terms containing unions have to be ordered in some uniform way to perform equality checks. Fortunately, using the derived \verb+Ord+ instance from GHC, the ordering works as needed. This is evidenced by the tests included in the package \verb+Analysis.Types+ which live in the folder ``test''.
 \\\\
 To sumarize, the normal form of a term is obtained by:
 \begin{enumerate}
@@ -94,6 +94,7 @@ To sumarize, the normal form of a term is obtained by:
 \item Reducing the term until a fixpoint is found
 \item Grouping all unions that appear in the term inside a Set (from \verb+Data.Set+)
 \end{enumerate}
+The function that converts a term to its normal form of a term will from now on be reffered to as \verb+normalize+.
 \subsection{Reduction}
 The addition of sets to the language requries a couple of extra reduction rules to ensure normal forms are indeed unique. Theese rules are implemented in \verb+Analysis.Types.Common+ package by the algebra \verb+baseRedUnionAlg+. Below they are defined:
 \begin{lstlisting}[
@@ -143,7 +144,7 @@ The first problem is that free variables are produced as a result of replacing a
 \[
 \left(\left(\mathbf{fix}\;{}\left(\lambda{}x^{1}:\mathtt{B}\to{}\mathtt{B}\;{}.\;{}\left(\lambda{}x^{2}:\mathtt{B}\;{}.\;{}\left(\mathbf{if}\;{}x^{2}\;{}\mathbf{then}\;{}\left(x^{1}*\left(\mathbf{False}\right)^{\mathit{@8}}\right)^{\mathit{@6}}\;{}\mathbf{else}\;{}\left(\mathbf{True}\right)^{\mathit{@9}}\right)^{\mathit{@4}}\right)^{\mathit{@3}}\right)^{\mathit{@2}}\right)^{\mathit{@1}}*\left(\mathbf{True}\right)^{\mathit{@10}}\right)^{\mathit{@0}}
 \]
-and its resulting type and effects (without the additions:
+and its resulting type and effects (without the additions):
 \[
 \begin{array}{c}
 \tau=\mathtt{B}^{\left\{\beta{}^{-25}*\left\{\right\};\;{}\textbf{@9};\;{}\beta{}^{-25}*\textbf{@8}\right\}} \\
@@ -180,7 +181,7 @@ to have type:
 \[
 \forall{}\delta^{24}:\mathtt{A}\to\mathtt{E}.\forall{}\beta^{25}:\mathtt{A}\to\mathtt{A}.\forall{}\beta{}^{1}:\mathtt{A}\;{}.\;{}\left(\left(\mathtt{B}\right)^{\beta{}^{1}}\right)\xrightarrow{\left\{\left(\textbf{@4},\beta{}^{1}\right);\;{}\left(\textbf{@6},\textbf{@3}\right);\;{}\delta{}^{24}*\textbf{@8}\right\}}\left(\mathtt{B}\right)^{\left\{\beta{}^{25}*\left\{\right\};\;{}\textbf{@9};\;{}\beta{}^{25}*\textbf{@8}\right\}}
 \]
-The type is equally bad because it introduces poisoning due to the fact that the label {\bf @8} is applied to an arbitrary variable of type $\mathtt{B}\to\mathtt{B}$. If one chooses to replace $\beta^{24}$ with the identity function, the label {\bf @8} will appear as a possible annotation that flows out of the function but the term constructed at {\bf @8} will never flow out of this expression.
+The type is equally bad because it introduces poisoning due to the fact that the label {\bf @8} is applied to an arbitrary function of sort $\mathtt{A}\to\mathtt{A}$. If one chooses to replace $\beta^{25}$ with the identity function, the label {\bf @8} will appear as a possible annotation that flows out of the function but the term constructed at {\bf @8} will never flow out of this expression.
 \\\\
 To solve the problem, consider for a moment what $\beta^{-25}$ and $\delta^{-24}$ mean. They originally represented the action of an arbitrary function, but in this context the function is no longer arbitrary. The function is now the argument of \verb+fix+:
 \[
@@ -242,4 +243,10 @@ The matching algorithm also benefits from the assumption of having its arguments
 \subsection{Instantiation}
 This algorithm removes the outter most quantifiers of a type and replaces the variables bound by those quantifiers with free fresh variables. Not much can be said about the algorithm since it is a line by line translation of the pseudo-code. Free variables are obtained using the context which keeps track of the sort given to the variables.
 \subsection{Constraint Solving}
+The algorithm is implemented as described in the paper. Since \verb+Annotation+ and \verb+Effect+ are different types in Haskell, they are packed inside an \verb+Either+ to distinguish them. In addition to the arguments described in the paper, the algorithm takes as an additional argument the label of the expression under active analysis for error reporting. The constraint solving phase is done by the \verb+solveIt+ algorithm which iterates over a queue inside its own state monad. To check for the subset relation, the following rule is used:
+\[
+\xi_1\subseteq \xi_2\ =\ \mathtt{normalize}\ \xi_2\ \equiv\ \mathtt{normalize}\ \left(\xi_1\cup\xi_2\right)
+\]
+The pseudo-code also hax the luxury of being able to apply substitutions in a single line but the implementation of the solver must check which case of the \verb+Either+ type is being substituted and then apply the replacement of free variables as appropiate. This process is handled by the sub-routine \verb+lookupExpr+. Since this algorithm lives in the monadic environment from which free variables are obtained, it also has access to the environment containing the sorts of the free variables. This is important because the initalization stage when all variables are assigned to the empty set, the empty element for the variable is used instead of the empty set. This element is obtained as described above using the sort available in the environment.
+
 \end{document}

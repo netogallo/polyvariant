@@ -155,9 +155,9 @@ renderEntry e = do
       addContent c2 e2
       return r
 
-clearMessages webUi = do
-  msgsDiv <- messagesDiv webUi
-  htmlElementSetInnerHTML msgsDiv ("" :: String)
+clearDiv webUi div = do
+  div' <- div webUi
+  htmlElementSetInnerHTML div' ("" :: String)
 
 appendPlainMessage webUi msg = do
   msgsDiv <- messagesDiv webUi
@@ -195,8 +195,8 @@ compile webUi = do
   calcDiv <- calcRender webUi
   typeDiv <- typeRender webUi
   effectsDiv <- effectsDivSel webUi
-  clearMessages webUi
   logs <- logDivs webUi
+  mapM_ (clearDiv webUi) [messagesDiv, typeRender, effectsDivSel, calcRender, redCalcDiv]
   let result = calc >>= Just . reconstruction
       renderCtx ctx =
         mapM_ (\e -> do

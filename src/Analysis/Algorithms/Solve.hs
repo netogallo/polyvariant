@@ -16,6 +16,13 @@ import Control.Monad.State
 import Control.Monad.Except
 
 
+-- | Helper function that iterates over elements of the constraint queue
+-- until all constraints are resolved. The algorithm checks wether an
+-- expression A is a subset of another expression B by normalizing
+-- B and B `union` A and checking wether they are equal. The algorithm
+-- Also takes a list of dependencies such that when a new value is calculated
+-- for a variable under analysis, all expressions containing that variable
+-- are analyzed again
 solveIt :: (MonadError RFailure m, MonadState RContext m) =>
            Int ->
            M.Map Int (D.Set (Either A.Annotation E.Effect, Int)) ->
@@ -42,6 +49,9 @@ solveIt l deps = do
     put (worklist',analysis')
     solveIt l deps
   where
+    -- Function that when provided with an expression and the analysis so far,
+    -- replaces all the free variables of the expression with the value determined
+    -- so far by the analysis
     lookupExpr e = do
       analysis <- use _2
       let (annAnalysis,_) = M.mapEither id analysis
@@ -49,6 +59,11 @@ solveIt l deps = do
         Left ann -> Left $ A.replaceFree annAnalysis ann
         Right eff -> Right $ E.replaceFree analysis eff
 
+-- | The constraint solver. Given a list of subset relations, this
+-- algorithm determines which is the minimal set suitable for the variables
+-- being ananalized. It takes as input the a list of constraints (c)
+-- list of constants (x), b and d which are the Annotation and Effect
+-- variables being analyzed
 solve l c x b d = do
   -- Initialize the analysis map assigning to all
   -- variables appearing in the constraints the empty element
