@@ -38,4 +38,4 @@ t12 = Fix (Abs (C.Var 1 (Arr TBool (Arr TBool TBool))) (Abs (C.Var 2 TBool) (If 
 
 t13 = App (App t12 VTrue) VFalse
 
-allExamples = [t0,t1,t2,t3,t7,t4,t8,t5,t6,t9,t10,t11]
+allExamples = [t0,t1,t2,t3,t7,t4,t8,t5,t6,t9,t10,t11,t12,t13]
