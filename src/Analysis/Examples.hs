@@ -34,4 +34,8 @@ t10 = Fix (Abs (C.Var 1 (Arr TBool (Arr TBool TBool))) (Abs (C.Var 2 TBool) (Abs
 
 t11 = App (App t10 VTrue) VFalse
 
+t12 = Fix (Abs (C.Var 1 (Arr TBool (Arr TBool TBool))) (Abs (C.Var 2 TBool) (If (Var 2) (Abs (C.Var 3 TBool) (If (Var 2) (App (App (Var 1) VFalse) VFalse) (Var 3))) (Abs (C.Var 3 TBool) (Var 3)))))
+
+t13 = App (App t12 VTrue) VFalse
+
 allExamples = [t0,t1,t2,t3,t7,t4,t8,t5,t6,t9,t10,t11]

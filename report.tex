@@ -138,7 +138,7 @@ The reconstruciton algorithm also contains an Exception monad to handle cases wh
 \subsection{Reconstruction}
 The algorithm is implemented very similarly as it is described in the paper. It is divided in three stages, namely \verb+calcGammas+, \verb+calcCompletions+ and \verb+reconstructionF+ which perform the steps indicated above. It includes a logging and error reporting facility. The log contains a list of values for all the variables that are defined in the pseudo-code algorithm of the original paper. Since this implementation performs a particular normalization, the log also includes the values of the variables before normalizations were applied. After the algorithm completes, a final constraint solving step is invoked to obtain the final annotation for the type and the set of effects that have been obtained for the type.
 \\\\
-With the algorithm as described in the original paper, the author did not manage to produce a successful implementation to analyzie fixpoints. Below the problems encountered are described and later the solution the author implement in this version of the algorithm. If the implementation as described in the original paper is desired, the program can be compiled with the CPP flag ``-DNoFixWorkaround''. This is the version used to show the problems.
+With the algorithm as described in the original paper, the author did not manage to produce a successful implementation to analyzie fixpoints. Below the problems encountered are described and later the solution the author implemented in this version of the algorithm. If the implementation as described in the original paper is desired, the program can be compiled with the CPP flag ``-DNoFixWorkaround''. This is the version used to show the problems.
 \\\\
 The first problem is that free variables are produced as a result of replacing a variable with itself during the matching phase of the fix case. Consider the expression:
 \[
@@ -151,14 +151,14 @@ and its resulting type and effects (without the additions):
 \phi=\left\{\left(\textbf{@0},\textbf{@3}\right);\;{}\left(\textbf{@1},\textbf{@2}\right);\;{}\left(\textbf{@4},\textbf{@10}\right);\;{}\left(\textbf{@6},\textbf{@3}\right);\;{}\delta{}^{-24}*\textbf{@8}\right\}
 \end{array}
 \]
-When the fixpoint is being analyzied. The first step is a recursive call to the reconstruction algorithm to obtain the type of the underlying lambda. This results in:
+The type contains free variables that the constraint solver is unable to resolve. When the fixpoint is being analyzed, the first step is a recursive call to the reconstruction algorithm to obtain the type of the underlying lambda. This results in:
 \[
 \begin{array}{c}
 \forall{}\beta{}^{1}:\mathtt{A}\;{}.\;{}\forall{}\delta{}^{2}:\mathtt{A}\to{}\mathtt{E}\;{}.\;{}\forall{}\beta{}^{3}:\mathtt{A}\to{}\mathtt{A}\;{}.\;{}\left(\left(\forall{}\beta{}^{4}:\mathtt{A}\;{}.\;{}\left(\left(\mathtt{B}\right)^{\beta{}^{4}}\right)\xrightarrow{\delta{}^{2}*\beta{}^{4}}\left(\mathtt{B}\right)^{\beta{}^{3}*\beta{}^{4}}\right)^{\beta{}^{1}}\right)\\
 \xrightarrow{\left\{\right\}}\left(\forall{}\beta{}^{4}:\mathtt{A}\;{}.\;{}\left(\left(\mathtt{B}\right)^{\beta{}^{4}}\right)\xrightarrow{\left\{\left(\textbf{@4},\beta{}^{4}\right);\;{}\left(\textbf{@6},\beta{}^{1}\right);\;{}\delta{}^{2}*\textbf{@8}\right\}}\left(\mathtt{B}\right)^{\left\{\beta{}^{3}*\left\{\right\};\;{}\textbf{@9};\;{}\beta{}^{3}*\textbf{@8}\right\}}\right)^{\textbf{@3}}
 \end{array}
 \]
-Important to note is that it has the $\beta^3$ and $\delta^2$ variable quantified. Since this is a function that takes as first argument a function and then uses that function in its body (the application labeled {\bf @6}), the $\beta^3$ and $\delta^2$ can be substitued according to the function provided in the first argument. Such substitution must also appear in the resulting value and effects because the function is used inside the body. Now this type is instantiated (via the instantiation algorithm) which simply removes the quantifiers making $\beta^1$, $\delta^2$ and $\beta^3$ free. The type is then pattern matched to obtain the variables $\tau'$ and $\tau''$. Doing as stated above, their value becomes (negative identifiers denote free variables):
+Important to note: it quantifies over the $\beta^3$ and $\delta^2$ variables. Since this is a function that takes as first argument a function and then uses that function in its body (the application labeled {\bf @6}), the $\beta^3$ and $\delta^2$ can be instantiated according to the function provided as argument. Such instantiation must also appear in the resulting annotations and effects because the function is used inside the body. Next the type is instantiated (via the instantiation algorithm), which simply removes the quantifiers, making $\beta^1$, $\delta^2$ and $\beta^3$ free. The type is then pattern matched to obtain the variables $\tau'$ and $\tau''$. Doing as stated above, their value becomes (negative identifiers denote free variables):
 \[
 \tau' = \forall{}\beta{}^{1}:\mathtt{A}\;{}.\;{}\left(\left(\mathtt{B}\right)^{\beta{}^{1}}\right)\xrightarrow{\delta{}^{-24}*\beta{}^{1}}\left(\mathtt{B}\right)^{\beta{}^{-25}*\beta{}^{1}}
 \]
@@ -166,14 +166,14 @@ Important to note is that it has the $\beta^3$ and $\delta^2$ variable quantifie
 \[
 \tau'' = \forall{}\beta{}^{1}:\mathtt{A}\;{}.\;{}\left(\left(\mathtt{B}\right)^{\beta{}^{1}}\right)\xrightarrow{\left\{\left(\textbf{@4},\beta{}^{1}\right);\;{}\left(\textbf{@6},\beta{}^{-23}\right);\;{}\delta{}^{-24}*\textbf{@8}\right\}}\left(\mathtt{B}\right)^{\left\{\beta{}^{-25}*\left\{\right\};\;{}\textbf{@9};\;{}\beta{}^{-25}*\textbf{@8}\right\}}
 \]
-Theese types are then matched to produce a replacement. Matching proceeds by adding a replacement to the quantified and then the case for arrows of the matching algorithm is reached. Looking at $\tau'$ and $\tau''$, theese are the values of the relevant variables involved in this stage of matching:
+Theese types are then matched to produce a replacement. Matching proceeds by creating a replacement to the quantified variable ($\beta^1$) and then the case for arrows of the matching algorithm is reached. Looking at $\tau'$ and $\tau''$, theese are the values of the relevant variables involved in this stage of matching:
 \[
 \begin{array}{c c}
 \delta_0\overline{\chi_i}=\delta{}^{-24}*\beta{}^{1} & \phi = \left\{\left(\textbf{@4},\beta{}^{1}\right);\;{}\left(\textbf{@6},\beta{}^{-23}\right);\;{}\delta{}^{-24}*\textbf{@8}\right\} \\
 \beta_0\overline{\beta_j}=\beta{}^{-25}*\beta{}^{1} & \psi_2=\left\{\beta{}^{-25}*\left\{\right\};\;{}\textbf{@9};\;{}\beta{}^{-25}*\textbf{@8}\right\}
 \end{array}
 \]
-At this stage, the substitution $\theta$ is extended with $\left[\delta^{-24}\to{}\left(\lambda{}\beta{}^{1}:\mathtt{A}\;{}.\;{}\left\{\left(\textbf{@4},\beta{}^{1}\right);\;{}\left(\textbf{@6},\beta{}^{-23}\right);\;{}\delta{}^{-24}*\textbf{@8}\right\}\right)\right]$ and\\ $\left[\beta^{-25}\to{}\left(\lambda{}\beta{}^{1}:\mathtt{A}\;{}.\;{}\left\{\beta{}^{-25}*\left\{\right\};\;{}\textbf{@9};\;{}\beta{}^{-25}*\textbf{@8}\right\}\right)\right]$. Both of theese cases substitute a free variable with an expression that contains the variable. One simple solution seems to be eliminating the exprssions that contain $\delta^{-24}$ and $\beta^{-25}$. For the annotation signature that would give the correct result but for the effect signature, the consumption of {\bf @8} by `some` expression which clearly happens in the expression labeled {\bf @6}. The second alternative one could consider is quantifying over thoose variables which would result with the fixpoint expression:
+At this stage, the substitution $\theta$ is extended with $\left[\delta^{-24}\to{}\left(\lambda{}\beta{}^{1}:\mathtt{A}\;{}.\;{}\left\{\left(\textbf{@4},\beta{}^{1}\right);\;{}\left(\textbf{@6},\beta{}^{-23}\right);\;{}\delta{}^{-24}*\textbf{@8}\right\}\right)\right]$ and\\ $\left[\beta^{-25}\to{}\left(\lambda{}\beta{}^{1}:\mathtt{A}\;{}.\;{}\left\{\beta{}^{-25}*\left\{\right\};\;{}\textbf{@9};\;{}\beta{}^{-25}*\textbf{@8}\right\}\right)\right]$. Both of theese cases substitute a free variable with an expression that contains the variable. This is how the free variables end up in the resulting type. One simple solution seems to be eliminating the exprssions that contain $\delta^{-24}$ and $\beta^{-25}$. For the annotation signature that would give the correct result but for the effect signature, the consumption of {\bf @8} by `some` expression, which clearly happens in the expression labeled {\bf @6}, would get discarded. A second alternative is quantifying over the free variables which would result with the fixpoint expression:
 \[
 \mathbf{fix}\;{}\left(\lambda{}x^{1}:\mathtt{B}\to{}\mathtt{B}\;{}.\;{}\left(\lambda{}x^{2}:\mathtt{B}\;{}.\;{}\left(\mathbf{if}\;{}x^{2}\;{}\mathbf{then}\;{}\left(x^{1}*\left(\mathbf{False}\right)^{\mathit{@8}}\right)^{\mathit{@6}}\;{}\mathbf{else}\;{}\left(\mathbf{True}\right)^{\mathit{@9}}\right)^{\mathit{@4}}\right)^{\mathit{@3}}\right)^{\mathit{@2}}
 \]
@@ -181,7 +181,7 @@ to have type:
 \[
 \forall{}\delta^{24}:\mathtt{A}\to\mathtt{E}.\forall{}\beta^{25}:\mathtt{A}\to\mathtt{A}.\forall{}\beta{}^{1}:\mathtt{A}\;{}.\;{}\left(\left(\mathtt{B}\right)^{\beta{}^{1}}\right)\xrightarrow{\left\{\left(\textbf{@4},\beta{}^{1}\right);\;{}\left(\textbf{@6},\textbf{@3}\right);\;{}\delta{}^{24}*\textbf{@8}\right\}}\left(\mathtt{B}\right)^{\left\{\beta{}^{25}*\left\{\right\};\;{}\textbf{@9};\;{}\beta{}^{25}*\textbf{@8}\right\}}
 \]
-The type is equally bad because it introduces poisoning due to the fact that the label {\bf @8} is applied to an arbitrary function of sort $\mathtt{A}\to\mathtt{A}$. If one chooses to replace $\beta^{25}$ with the identity function, the label {\bf @8} will appear as a possible annotation that flows out of the function but the term constructed at {\bf @8} will never flow out of this expression.
+The type is equally bad because it introduces poisoning due to the fact that the label {\bf @8} is applied to an arbitrary function of sort $\mathtt{A}\to\mathtt{A}$. If one chooses to replace $\beta^{25}$ with the identity function, the label {\bf @8} will appear as a possible annotation that flows out of the function; but the term constructed at {\bf @8} will never flow out of this function.
 \\\\
 To solve the problem, consider for a moment what $\beta^{-25}$ and $\delta^{-24}$ mean. They originally represented the action of an arbitrary function, but in this context the function is no longer arbitrary. The function is now the argument of \verb+fix+:
 \[
@@ -193,8 +193,8 @@ which has the annotated type given previously. Of particular interest is the typ
 \]
 It is important to note that $\beta^{4}$ is the variable that denotes the argument of the recursive call of the function. In this example: $\mathbf{False}^{\mathit{@8}}$. The $\delta^2$ variable denotes the effects induced by the recursive function (ie. the function itself). With this notion it is very easy to determine what $\beta^{3}$ and $\delta^{2}$ ($\beta^{-25}$ and $\delta^{-24}$ respectively) should be:
 \begin{itemize}
-\item If the annotation signature contains the variable $\beta^{4}$ on it's own, it means that the recursive argument may be returend by the function which means that $\beta^{-25}$ should be the identity function.
-\item If the annotation signature does not contain the variable $\beta^{4}$ on it's own, it means that the recursive argument is never returned by the function so $\beta^{-25}$ should be the constant $\emptyset$ function.
+\item If the annotation signature contains the variable $\beta^{4}$ on its own, it means that the recursive argument may be returend by the function which means that $\beta^{-25}$ should be the identity function.
+\item If the annotation signature does not contain the variable $\beta^{4}$ on its own, it means that the recursive argument is never returned by the function so $\beta^{-25}$ should be the constant $\emptyset$ function.
 \item If the effect signature contains a flow parametrized by $\beta^{4}$ (for example $\left(\mathbf{@4},\beta^{4}\right)$) it means that a recursive call is performed with the element labeled by the flow label as argument. The variable $\delta^{-24}$ should be a function that takes as argumetn an annotation and returns all the flows containing $\beta^4$. In this example: $\delta^{-24}=\lambda\beta:\mathtt{A}.\left(\mathbf{@4},\beta\right)$.
 \end{itemize}
 If the recursive call takes more than one argument, theese function should be adjusted respectively to discard the annotation variables that don't appear in the corresponding annotation and effect signatures of the recursive functions. With theese adjustments in place, the fixpoint expression now has type:
@@ -208,6 +208,7 @@ and the whole expression results in:
 \phi=\left\{\left(\textbf{@1},\textbf{@2}\right);\;{}\left(\textbf{@4},\textbf{@10}\right);\;{}\left(\textbf{@4},\textbf{@8}\right);\;{}\left(\textbf{@6},\textbf{@3}\right);\;{}\left(\textbf{@0},\textbf{@3}\right)\right\}
 \end{array}
 \]
+The example above provides the intuition behind the problem. The general solution to the problem is creating a list of adjustment functions since ocassions when fixpoint recursion is performed over functions that take more than one argument create more free variables. Theese adjustments are obtained via the functions \verb+getQuantifiedVars+ and \verb+mkFixReplacements+. Below they are described:
 The second adjustment that was done to the algorithm concerns dealing with infinite recursion. Consider fixing the identity function:
 \[
 \left(\mathbf{fix}\;{}\left(\lambda{}x^{1}:\mathtt{B}\to{}\mathtt{B}\;{}.\;{}x^{1}\right)^{\mathit{@1}}\right)^{\mathit{@0}}
@@ -247,6 +248,7 @@ The algorithm is implemented as described in the paper. Since \verb+Annotation+ 
 \[
 \xi_1\subseteq \xi_2\ =\ \mathtt{normalize}\ \xi_2\ \equiv\ \mathtt{normalize}\ \left(\xi_1\cup\xi_2\right)
 \]
-The pseudo-code also hax the luxury of being able to apply substitutions in a single line but the implementation of the solver must check which case of the \verb+Either+ type is being substituted and then apply the replacement of free variables as appropiate. This process is handled by the sub-routine \verb+lookupExpr+. Since this algorithm lives in the monadic environment from which free variables are obtained, it also has access to the environment containing the sorts of the free variables. This is important because the initalization stage when all variables are assigned to the empty set, the empty element for the variable is used instead of the empty set. This element is obtained as described above using the sort available in the environment.
+The pseudo-code also has the luxury of being able to apply substitutions in a single line but the implementation of the solver must distinguish which case of the \verb+Either+ type is being substituted and then apply the replacement of free variables as appropiate. This process is handled by the sub-routine \verb+lookupExpr+. Since this algorithm lives in the monadic environment from which free variables are obtained, it also has access to the environment containing the sorts of the free variables. This is important because the initalization stage when all variables are assigned to the empty set, the empty element for the variable is used instead of the empty set. This element is obtained as described above using the sort available in the environment.
+
 
 \end{document}
