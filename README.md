@@ -14,3 +14,5 @@ in the source directory. This will create a folder inside the binary directory o
 The user interface contains a text field, buttons for examples and a button to compile the input. A checkbox to decide whether to reduce the expression or not is also provided. Note that one should only check this box if the expression has a normal form. Otherwise the browser will get stuck in an infinite loop.
 
 After entering an expression (sample expressions can be written by clicking one of the example buttons), the expression can be compiled. The result will be a list of error messages (if the expression is invalid or does not typecheck) or the type of the expression, the effects that the expression contains, the pretty print of the expression, the reduced expression (if the option was ticked) and two logs of the result. Both logs contain the same information, the double pane is added so it's easier to browse the logs. Be patient because typesetting long expressions (and their logs) can take a lot of time.
+
+The test suite can be run with GHC. It requires __test-framework__ and __test-framework-quickcheck2__ to be installed.
