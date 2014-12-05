@@ -11,7 +11,7 @@
 \begin{document}
 \maketitle
 \section{Introduction}
-This document describes the implementation of the analysis named: "Polyvariant Flow Analysis with Higher-ranked Polymorphic Types and Higher-order Effect Operators". This is a flow analysis for a higher order language which uses higher-ranked types to increase the presicion. The result of the analysis is delivered as an annotated type system for a simply typed lambda calculus. The major limitation of the analysis is that it does not support polymorphic types.
+This document describes the implementation of the analysis named: ``Polyvariant Flow Analysis with Higher-ranked Polymorphic Types and Higher-order Effect Operators". This is a flow analysis for a higher order language which uses higher-ranked types to increase the presicion. The result of the analysis is delivered as an annotated type system for a simply typed lambda calculus. The major limitation of the analysis is that it does not support polymorphic types.
 \\\\
 The analysis has been implemented in the Haskell programming language and also includes an interactive web interface that can be compiled using GHCJS\cite{GHCJS}. Alternatively, the analysis can be compiled with the GHC compiler and the input is read form the standard input and the ouput is a Latex document with the results of the analysis.
 \section{Notation conventions}
@@ -19,6 +19,8 @@ Notation conventions are used in this document, several are borrowed from the pa
 \begin{itemize}
 \item $\beta_i$ will denote variables for annotation expressions in definitions, pseudo-code or references to \cite{analysis}.
 \item $\delta_i$ will denote variable for effect expressions in definitions, pseudo-code or references to \cite{analysis}.
+\item $\phi$ will denote an arbitrary effect expression (as in \cite{analysis}).
+\item $\psi$ will denote an arbitrary annotation exprssion (as in \cite{analysis}).
 \item $\overline{x_i}$ will denote a sequence of $x$
 \item $\beta^{i}$ will denote variables for annotations in expressions used as examples. When $i>0$ it will refer to bound variables (even if the binder is not visible because a sub-expression of a larger expression is being shown) and when $i<0$ it will refer to free variables.
 \item $\beta^{i}$ will denote variables for effects in expressions used as examples. When $i>0$ it will refer to bound variables (even if the binder is not visible because a sub-expression of a larger expression is being shown) and when $i<0$ it will refer to free variables.
@@ -209,6 +211,47 @@ and the whole expression results in:
 \end{array}
 \]
 The example above provides the intuition behind the problem. The general solution to the problem is creating a list of adjustment functions since ocassions when fixpoint recursion is performed over functions that take more than one argument create more free variables. Theese adjustments are obtained via the functions \verb+getQuantifiedVars+ and \verb+mkFixReplacements+. Below they are described:
+\begin{lstlisting}[
+  mathescape,
+  columns=fullflexible,
+  basicstyle=\fontfamily{lmvtt}\selectfont,
+]
+  getQuantifiedVars ($\forall \left(\beta:s\right).\ \tau\xrightarrow{\phi}\tau'^{\psi}$) = $\left(\left(\beta:s\right),\phi,\psi\right)\ \uplus\ $getQuantifiedVars $\tau'$
+  getQuantifiedVars $\tau$ = $\emptyset$
+\end{lstlisting}
+The algorithm is defined for lists ($\uplus$ denotes list append and $\emptyset$ empty list) since the order in which the quantifiers appears is important. The algorithm simply matches each quantified variable with the effects and annotatiions immediately exposed by the expression inside the quantifier. Next is the definition of \verb+mkFixReplacements+:
+\begin{lstlisting}[
+  mathescape,
+  columns=fullflexible,
+  basicstyle=\fontfamily{lmvtt}\selectfont,
+]
+  filterExp $\overline{\chi_i}$ $\psi_1\cup\psi_2$ = filterExp $\overline{\chi_i}$ $\psi_1\ \cup$ filterExp $\overline{\chi_i}$ $\psi_2$
+  filterExp $\overline{\chi_i}$ $\phi_1\cup\phi_2$ = filterExp $\overline{\chi_i}$ $\phi_1\ \cup$ filterExp $\overline{\chi_i}$ $\phi_2$
+  filterExp $\overline{\chi_i}$ $\beta$ | $\beta\in\overline{\chi_i}$ = $\{\beta\}$
+  filterExp $\overline{\chi_i}$ $\delta$ | $\delta\in\overline{\chi_i}$ = $\{\delta\}$
+  filterExp $\overline{\chi_i}$ $\mathit{l}$ = $\{\mathit{l}\}$
+  filterExp $\overline{\chi_i}$ $\left(\mathit{l},\psi\right)$ = $\{\left(\mathit{l},\psi_1\right) | \psi_1 \in$ filterExp $\overline{\chi_i}$ $\psi\}$
+  filterExp $\psi$ = $\emptyset$
+  filterExp $\phi$ = $\emptyset$
+
+  mkFixReplacement $\overline{\left(\chi_i,\phi_i,\psi_i\right)}$ = ($\lambda\overline{\chi_i}$ . filterExp (last $\overline{\psi_i}$), $\lambda\overline{\chi_i}$ . filterExp (last $\overline{\phi_i}$))
+
+  mkFixReplacements $\overline{\left(\chi_j,\phi_j,\psi_j\right)}$ = 
+    let cata ($\mathit{k}$,$\theta_0$,$\overline{\left(\chi_i,\phi_i,\psi_i\right)}$) ($\chi,\phi,\psi$) =
+          let ($\psi$, $\phi$) = mkFixReplacement ($\overline{\left(\chi_i,\phi_i,\psi_i\right)}\uplus\left(\chi,\phi,\psi\right)$) 
+          in ($*\to k$, $\left[\beta_k\to\psi\right]\left[\delta_k\to\phi\right]\theta_0$, $\overline{\left(\chi_i,\phi_i,\psi_i\right)}\uplus\left(\chi,\phi,\psi\right)$)
+        (-, -, $\theta$) = foldl cata ($*$,[],$\emptyset$) $\overline{\left(\chi_j,\phi_j,\psi_j\right)}$
+    in $\theta$
+\end{lstlisting}
+where
+\begin{itemize}
+\item $\left[\beta_k\to\psi\right]$ denotes a replacement for all free annotation variables with sort of kind $k$ with expression $\psi$.
+\item $\left[\delta_k\to\phi\right]$  denotes a replacement for all free effect variables with sort of kind $k$ with expression $\phi$
+\end{itemize}
+The algorithm \verb+mkFixReplacements+ takes as input a result from \verb+getQuantifiedVars+. The input is the sequence of quantified variables of the type of an expression that is given to \verb+fix+ as argument along with the toplevel effects and annotations. Theese effects and annotations are inspected for occurences of the variable and constant values (\verb+filterExp+ performs such check). Expressions containing those effects and annotations become the body of the abstraction. When many variables appear quantified, multiple abstractions are created, each with a higher kind, since the toplevel annotations and expressions may contain several of the quantified variables since they are bound by several quantifiers. As an end result, this algorithm produces a set of replacements for the free annotation and effect variables that emerge from the incomplete replacement returned by the matching algorithm.
+\\\\
+This algorithm seems to be more complicated that it should, but all theese details have to be in place is one wishes correct results when using \verb+fix+ with functions that take more than one argument; especially if such functions contain intermediate expressions instead of simply being a sequence of abstractions and then an expression. Examples 11-14 of this program contain such cases.
+\\\\
 The second adjustment that was done to the algorithm concerns dealing with infinite recursion. Consider fixing the identity function:
 \[
 \left(\mathbf{fix}\;{}\left(\lambda{}x^{1}:\mathtt{B}\to{}\mathtt{B}\;{}.\;{}x^{1}\right)^{\mathit{@1}}\right)^{\mathit{@0}}

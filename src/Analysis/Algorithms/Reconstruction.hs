@@ -243,10 +243,11 @@ reconstructionF s0 = C.foldM alg
 #else
         omega3 = M.empty
 #endif
-        t = At.normalize $ At.replaceFree omega3 t0
+        tRaw = At.replaceFree omega3 t0
+        t = At.normalize tRaw
         bReps' = map snd $ M.toList bReps
         dReps' = map snd $ M.toList dReps
-      modify (history %~ (FixLog ((t,t0),c,i,b,d) (t1',tx) omega1 omega2 bReps' dReps' :))
+      modify (history %~ (FixLog ((t,tRaw),c,i,b,d) (t1',tx) omega1 omega2 bReps' dReps' :))
       return (t, b, d, c)
 
     boolF i = do
