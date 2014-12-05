@@ -11,7 +11,7 @@ author:              Ernesto Rodriguez
 maintainer:          neto@netowork.me
 -- copyright:           
 category:            Language
-build-type:          Simple
+build-type:          Custom
 
 -- extra-source-files:  
 cabal-version:       >=1.10
