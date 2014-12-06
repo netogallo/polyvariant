@@ -1,0 +1,16 @@
+\begin{thebibliography}{1}
+
+\bibitem{analysis}
+Stefan Holdermans and Jurriaan Hage.
+\newblock Polyvariant flow analysis with higher-ranked polymorphic types and
+  higher-order effect operators.
+\newblock In {\em Proceedings of the 15th ACM SIGPLAN International Conference
+  on Functional Programming}, ICFP '10, pages 63--74, New York, NY, USA, 2010.
+  ACM.
+
+\bibitem{GHCJS}
+GHCJS Team.
+\newblock Ghcjs.
+\newblock \url{https://github.com/ghcjs/ghcjs}.
+
+\end{thebibliography}

@@ -11,8 +11,12 @@ import qualified Data.Map as M
 import Control.Monad.State
 import qualified Data.Set as D
 
+-- | Type that denotes that both of its arguments should
+-- have the same normal form
 data Equiv = Equiv Annotation Annotation deriving Show
 
+-- | Given an environment of variables and a sort, produces a
+-- randomly generated Annotation of the input sort
 arbitraryWithGammaAndSort :: M.Map Int S.Sort -> S.Sort -> Gen Annotation
 arbitraryWithGammaAndSort gamma' sort' = evalStateT (arbitrary' (0 :: Int) gamma' sort') 0
    where
@@ -107,5 +111,8 @@ randomRewrite ann = evalStateT (randomRewrite' ann) 1
         App a b -> App <$> randomRewrite' a <*> randomRewrite' b
         Empty -> lift $ CT.maybeRuleProb (0,p) CT.identEq Empty
         a -> return a
-    
+
+-- | Property that requires that two equivalent terms
+-- (upto the equality rules defined in the paper) are
+-- equal after normalization
 normalizeEquivalent (Equiv a b) = normalize a == normalize b

@@ -6,30 +6,34 @@
 \usepackage{hyperref}
 \usepackage{listings}
 \usepackage{alltt}
+\usepackage{mathtools}
 \title{Experimentation Project}
 \author{Ernesto Rodriguez}
 \begin{document}
 \maketitle
 \section{Introduction}
-This document describes the implementation of the analysis named: ``Polyvariant Flow Analysis with Higher-ranked Polymorphic Types and Higher-order Effect Operators". This is a flow analysis for a higher order language which uses higher-ranked types to increase the presicion. The result of the analysis is delivered as an annotated type system for a simply typed lambda calculus. The major limitation of the analysis is that it does not support polymorphic types.
+This document describes the implementation of the analysis named: ``Polyvariant Flow Analysis with Higher-ranked Polymorphic Types and Higher-order Effect Operators" introduced at \cite{analysis}. This is a flow analysis for a higher order language which uses higher-ranked types to increase the precision. The result of the analysis is delivered as an annotated type system for a simply typed lambda calculus. The major limitation of the analysis is that it does not support polymorphic types.
 \\\\
-The analysis has been implemented in the Haskell programming language and also includes an interactive web interface that can be compiled using GHCJS\cite{GHCJS}. Alternatively, the analysis can be compiled with the GHC compiler and the input is read form the standard input and the ouput is a Latex document with the results of the analysis.
-\section{Notation conventions}
+The analysis has been implemented in the Haskell programming language and also includes an interactive web interface that can be compiled using GHCJS\cite{GHCJS}. This implementation can also be run with the Glasgow Haskell Compiler (GHC) via the interactive shell. It also includes a test suite that can be run with GHC. A compiled version of the implementation is available at \url{http://netowork.herokuapp.com/stuff/polyvariant/}.
+\section{Practical Information}
+This section contains some pointers that will make it easier for the reader to review the source code, web interface and the present document. It is recommended that the reader is familiar with the paper \cite{analysis} before reading through this document.
+\subsection{Notation Conventions}
 Notation conventions are used in this document, several are borrowed from the paper defining the analysis \cite{analysis}. Below they are described:
 \begin{itemize}
 \item $\beta_i$ will denote variables for annotation expressions in definitions, pseudo-code or references to \cite{analysis}.
 \item $\delta_i$ will denote variable for effect expressions in definitions, pseudo-code or references to \cite{analysis}.
 \item $\phi$ will denote an arbitrary effect expression (as in \cite{analysis}).
-\item $\psi$ will denote an arbitrary annotation exprssion (as in \cite{analysis}).
+\item $\psi$ will denote an arbitrary annotation expression (as in \cite{analysis}).
+\item $\xi$ will denote an arbitrary annotation or effect expression (as in \cite{analysis}).
 \item $\overline{x_i}$ will denote a sequence of $x$
-\item $\beta^{i}$ will denote variables for annotations in expressions used as examples. When $i>0$ it will refer to bound variables (even if the binder is not visible because a sub-expression of a larger expression is being shown) and when $i<0$ it will refer to free variables.
-\item $\beta^{i}$ will denote variables for effects in expressions used as examples. When $i>0$ it will refer to bound variables (even if the binder is not visible because a sub-expression of a larger expression is being shown) and when $i<0$ it will refer to free variables.
-\item $t*t_1$ denotes the application of $t$ to the argument $t_1$ in examples. Space will never be an application in the sample expressions (but it is in pseudo-code).
+\item $\beta^{i}$ will denote variables for annotations in expressions used as examples. When $i>0$ it will refer to bound variables (even if the binder is not visible because only a sub-expression of a larger expression is shown) and when $i<0$ it will refer to free variables.
+\item $\delta^{i}$ will denote variables for effects in expressions used as examples. When $i>0$ it will refer to bound variables (even if the binder is not visible because only a sub-expression of a larger expression is shown) and when $i<0$ it will refer to free variables.
+\item $t*t_1$ denotes the application of $t$ to the argument $t_1$ in examples. Space will never be an application in the example expressions (but it is in pseudo-code).
 \end{itemize}
-\section{File Structure}
-The code is divided in three modules: algorithms, types and web. The web group only contains details about manipulating dom elements and interfacing with the other two containers so it is not interesting and will not be explained any futher.
-\section{Types}
-This module defines all the types that were defined to model the analysis. This ammounts to:
+\subsection{File Structure}
+The code is divided in three modules: \verb+Algorithms+, \verb+Types+ and \verb+Web+. The three modules are inside the module \verb+Analysis+. The \verb+Web+ module only contains details about manipulating Dom elements and interfacing with the other two modules so it's not interesting and will not be explained any further.
+\section{Types Module}
+This module defines all the types that were defined to model the analysis. This amounts to:
 \begin{itemize}
 \item A type for the lambda calculus (LambdaCalc.hs)
 \item A type for simple types (Type.hs)
@@ -40,65 +44,66 @@ This module defines all the types that were defined to model the analysis. This 
 \end{itemize}
 Additionally, the module contains the \verb+Common+ component which defines algorithms that operates in many of those types.
 \subsection{Traversals}
-Tree traversals over the mentioned types are defined as folds. The \verb+Common+ component provides a type class called \verb+Fold+ which defines the necessary methods for basic traversal over a structure. This includes a function to fold over the structure and two algebras: the regular algebra and the group algebra. The fold function is expected to provide a unique index to all elements of the structure and the functions of each of the algebras always take as a first argument that index. All maps that indexed by integers used in this implementation use this unique identifier as their index.
+Traversals over the mentioned types are defined as folds. The \verb+Common+ component provides a type class called \verb+Fold+ which defines the necessary methods for basic traversal over a structure. This includes a function to fold over the structure (\verb+foldM+) and two algebras: the regular algebra and the group algebra. The fold function is expected to provide a unique index to all elements of the structure and the functions of each of the algebras always take as a first argument that index. All maps (\verb+Data.Map+) indexed by integers used in this implementation use this unique identifier as their index.
 \\\\
 Algebras are parametrized by three types: \verb+alg m s r+. The \verb+m+ parameter is the monad under which the algebra operates. The \verb+s+ parameter is the type of the structure the algebra is meant to traverse and the \verb+r+ parameter is the type of the state and result of a fold that uses such algebra.
 \\\\
 The {\bf regular algebra} is meant for either manipulating the three or performing some effectful computation while traversing the tree. The result or state of of folds that use that algebra are of the same type as the structure they traverse (ie. they are of type \verb+alg m s s+). The most common use of the algebra is performing applications or substitutions. The function \verb+baseAppAlg+ defines an algebra that performs application to a lambda calculus like term.
 \\\\
-The {\bf group algebra} is meant to collect results from a catamorphism. The \verb+Group+ typeclass as defined in this component is equivalent to a monoid. It defines an operation to join to elements of the group and an empty element. The most common use of this algebra is with maps. Since the index of each component dosen't change from fold to fold, a traversal can save local results in a map and look them up in subsequent traversals.
+The {\bf group algebra} is meant to collect results from a catamorphism. The \verb+Group+ typeclass as defined in this component is equivalent to a monoid. It defines an operation to join to elements of the group and an empty element. The most common use of this algebra is with maps. Since the index of each component doesn't change in different invocations of \verb+foldM+, a traversal can save local results in a map and look them up in subsequent traversals.
 \\\\
-The first refinement of \verb+Fold+ is the type class \verb+WithAbstraction+. This type class models structures that can define scoped variables. Variables in this implementation are represented by integer values. The \verb+increment+ method of the class increments every variable by the specified ammount. Details about the importance of the function will come later. It also defines the method \verb+abst+ which serves to pattern match abstraction elements of the structure and the method \verb+abstC+ that serves to build abstractions of that structure.
+The first refinement of \verb+Fold+ is the type class \verb+WithAbstraction+. This type class models structures that can define scoped variables. Variables in this implementation are represented by integer values. The \verb+increment+ method of the class increments every variable by the specified amount. Details about the importance of the function will come later. It also defines the method \verb+abst+ which serves to pattern match abstraction elements of the structure and the method \verb+abstC+ that serves to build abstractions of that structure.
 \\\\
-The \verb+LambdaCalculus+ class is a refinement of the \verb+WithAbstraction+ class. In addition to abstractions, structures that belong to this class also have variable occurences and applications. As before, it provides the methods \verb+app+, \verb+appC+, \verb+var+, \verb+varC+ to pattern match and construct application and variables. The algebras are extedned in a similar fashion.
+The \verb+LambdaCalculus+ class is a refinement of the \verb+WithAbstraction+ class. In addition to abstractions, structures that belong to this class also have variable occurrences and applications. As before, it provides the methods \verb+app+, \verb+appC+, \verb+var+, \verb+varC+ to pattern match and construct application and variables. The algebras are extended in a similar fashion.
 \\\\
-The final refinement is the \verb+WithSets+ class. This is the class of structures that contain sets. A set is modelled as an empty set and a union that joins elements to increase the size of the set. Additionally, the class can also have a case that contains a set of structures. This is a convenience facility for efficiency and to make comparison of elements easier. When the structure is being traversed by the \verb+foldM+ method, it is expected that this method un-packs the set case into a sequence of unions. Algebras over theese structures should make no assumptions on how the un-wrapping is done except that elements of the same set will be connected by unions. The algebra for theese structures does not contain a special case for the set branch since it should get converted to unions and handled as it were an union case.
+The final refinement is the \verb+WithSets+ class. This is the class of structures that contain sets. A set is modeled as an empty set (\verb+emptyM+ and \verb+emptyC+) and a union (\verb+unionM+ and \verb+unionC+) constructor that joins elements to increase the size of the set. Additionally, its members also have a case that contains a set (\verb+setM+ and \verb+setC+) constructor. This is a convenience facility for efficiency and to make comparison of elements easier. When the structure is being traversed by the \verb+foldM+ method, it is expected that this method un-packs the set case into a sequence of unions. Algebras over these structures should make no assumptions on how the un-wrapping is done except that elements of the same set will be connected by unions. The algebra for these structures does not contain a special case for the set branch since it should get converted to unions and handled as it were an union case.
 \subsection{Equality, Ordering and Normalization of Structures}
-The analysis requires certain operations to be defined in strucutres. Since it checks for type equality based on certain equality rules and defines algorithms under the assumption that types will be of a particular structure. The first requirement is some notion of structural equality. This is achieved by:
+\label{sec:red}
+The analysis requires certain operations to be defined for structures. Since it checks for type equality based on certain equality rules and defines algorithms under the assumption that types will have a particular structure. The first requirement is some notion of structural equality. This is achieved by:
 \begin{itemize}
 \item Having a uniform naming convention for variables.
 \item Having an ordering defined for elements and ensure that the unions or sets are always ordered with respect to that ordering.
 \end{itemize}
-The uniform nameing convention is achieved by nameing each variable according to the number of abstraction nestings that occur until the abstraction that introduces the variable. The depth of the abstractions that occur in a term are defined as follows:
+The uniform naming convention is achieved by naming each variable according to the number of nested abstractions until the abstraction that introduces it is located. The depth of the abstractions (nesting degree of the abstraction) that occur in a term is defined as follows:
 \begin{lstlisting}[
   mathescape,
   columns=fullflexible,
   basicstyle=\fontfamily{lmvtt}\selectfont,
 ]
-  depths $(\lambda x.t)$ = $\{\lambda x.t\ \to\ 1\}\ \cup\ \{t'\ \to\ d + 1\ |\ (t'\ \to\ d + 1)\ \in$ depths $t\}$
+  depths $(\lambda x.t)$ = $\{\lambda x.t\ \to\ 1\}\ \cup\ \{t'\ \to\ d + 1\ |\ (t'\ \to\ d)\ \in$ depths $t\}$
   depths $(t_1\ t)$ = depths $t_1\ \cup$ depths $t$
   depths $x$ = $\emptyset$
 \end{lstlisting}
-Using this notion of depth of an abstraction, it is possible to define a nameing convention where the name of a variable is always the depth of the abstraction where it was introduced. With this notion in place, care must be taken when performing applications since an application changes the depht of all variables inside the terms being applied. To perform applications, first an auxiliary function \verb+increment+ is defined (which is the same as the one in the \verb+WithAbstraction+ type class):
+Using this notion of depth of an abstraction, it is possible to define a naming convention where the name of a variable is always the depth of the abstraction where it was introduced. With this notion in place, care must be taken when performing applications since an application changes the depth of all variables inside the terms being applied. To perform applications, first an auxiliary function \verb+increment+ is defined (which is the same as the one in the \verb+WithAbstraction+ type class):
 \begin{lstlisting}[
   mathescape,
   columns=fullflexible,
   basicstyle=\fontfamily{lmvtt}\selectfont,
 ]
-  increment i t = increment' t
+  increment $i\ t$ = increment' $t$
     where
       increment' $(\lambda x.t)$ = $\lambda (x+i).$ increment' $t$
       increment' $(t_1 t)$ = (increment' $t_1$) (increment' $t$)
-      increment' $x$ | $x \in$ freeVariables(t) = x
-      increment' $x$ = x + i
+      increment' $x$ | $x \in$ freeVariables($t$) = x
+      increment' $x$ = $x + i$
 \end{lstlisting}
-A basic algebra that performs this increment is is provided in the \verb+Analysis.Types.Common+ package and is called \verb+baseIncAlg+. This algebra implements the common requirements for a lambda calculus and can be extended to handle more complex structures. Now assuming that one has two terms \verb+t1+ and \verb+t2+ with all variables named according to the depth of the binder where they wehere introduced. The application \verb+t1 t2+ is performed by:
+A basic algebra that performs this increment is is provided in the \verb+Analysis.Types.Common+ package and is called \verb+baseIncAlg+. This algebra implements the common requirements for a lambda calculus and can be extended to handle more complex structures. Now assuming that one has two terms \verb+t1+ and \verb+t2+ with all variables named according to the depth of the binder where they where introduced. The application (\verb+t1 t2+) is performed by:
 \begin{enumerate}
 \item Incrementing the variables of \verb+t2+ by one
-\item Perfroming the application (as usual)
+\item Performing the application (as usual)
 \item Decrementing the variables of the result by one
 \end{enumerate}
 This notion of application allows lambda terms to be named according to the depths and then perform reductions such that terms will reduce to the same terms. It is still the case that terms containing unions have to be ordered in some uniform way to perform equality checks. Fortunately, using the derived \verb+Ord+ instance from GHC, the ordering works as needed. This is evidenced by the tests included in the package \verb+Analysis.Types+ which live in the folder ``test''.
 \\\\
-To sumarize, the normal form of a term is obtained by:
+To summarize, the normal form of a term is obtained by:
 \begin{enumerate}
 \item Re-naming the variables according to the naming convention discussed above
 \item Reducing the term until a fixpoint is found
-\item Grouping all unions that appear in the term inside a Set (from \verb+Data.Set+)
+\item Grouping all unions that appear in the term inside a Set (from \verb+Data.Set+). Done by the function \verb+unions+ from \verb+Analysis.Types.Common+.
 \end{enumerate}
-The function that converts a term to its normal form of a term will from now on be reffered to as \verb+normalize+.
+The function that converts a term to its normal form will, from now on, be refereed to as \verb+normalize+.
 \subsection{Reduction}
-The addition of sets to the language requries a couple of extra reduction rules to ensure normal forms are indeed unique. Theese rules are implemented in \verb+Analysis.Types.Common+ package by the algebra \verb+baseRedUnionAlg+. Below they are defined:
+The addition of sets to the language requires a couple of extra reduction rules (besides application) to ensure equivalent terms have the same normal forms. These rules are implemented in \verb+Analysis.Types.Common+ package by the algebra \verb+baseRedUnionAlg+. Below they are defined:
 \begin{lstlisting}[
   mathescape,
   columns=fullflexible,
@@ -107,12 +112,42 @@ The addition of sets to the language requries a couple of extra reduction rules 
   (t1 $\cup$ t2) t3 $\rightarrow$ (t1 t3 $\cup$ t2 t3)
   ($\lambda$ x . t1) $\cup$ ($\lambda$ x . t2) $\rightarrow$ $\lambda$ x . t1 $\cup$ t2
 \end{lstlisting}
-Since the language contains sets, one must ensure that ordering of the elements of the set does not matter. In other words, the elements of a set must always be ordered in a uniform way. To achieve this, the derived \verb+Eq+ instance and the structure \verb+Data.Set+ are used. For this, the algebra \verb+unions+ is defined in \verb+Analysis.Types.Common+. This algebra traverses a structure and combines all elements connected by unions into a single set. This is the reason why the types \verb+Annotation+ and \verb+Effect+ contain a constructor named \verb+Set+. As mentioned above, the folds for each of the elements re-write theese sets as sequences of unions.
+Since the language contains sets, one must ensure that ordering of the elements of the set does not matter. In other words, the elements of a set must always be ordered in a uniform way. To achieve this, the derived \verb+Eq+ instance and the structure \verb+Data.Set+ are used. For this, the algebra \verb+unions+ is defined in \verb+Analysis.Types.Common+. This algebra traverses a structure and collects all elements connected by unions into a single set. This is the reason why the types \verb+Annotation+ and \verb+Effect+ contain a constructor named \verb+Set+. As mentioned above, the folds for each of the elements re-write these sets as sequences of unions.
+\subsection{Tests}
+The \verb+Types+ module contains some tests to ensure that the reduction rules operate as required. The tests were heavily used to ensure the normalization of terms works as required by the paper. Nevertheless, it is conjectured that the normalization rules of this implementation do not work in general for a lambda calculus with set unions.
 \\\\
-The final ingredient of reductions is performing applications as mentioned in the section above.
-\\\\
+The \verb+CommonTests+ sub-module of \verb+Types+ implements re-write rules that are derived from the annotation and effect equivalence relations that are defined in the paper. Concretely, the re-write rules that exist in this implementation are \verb+assocEq+, \verb+emptyEq+, \verb+identEq+ and \verb+randomReplace+ defined as follows:
+\begin{lstlisting}[
+  mathescape,
+  columns=fullflexible,
+  basicstyle=\fontfamily{lmvtt}\selectfont,
+]
+  assocEq $\coloneqq$ $\xi_1\cup\xi_2$ $\to$ $\xi_2\cup\xi_1$
+  emptyEq $\coloneqq$ $\xi$ $\to$ $\xi\cup\emptyset$
+  identEq $\coloneqq$ $\xi$ $\to$ $\xi\cup\xi$
+  randomReplace $\coloneqq$ $\xi$ $\to$ maybeReplace $\xi$
+\end{lstlisting}
+where,
+\begin{lstlisting}[
+  mathescape,
+  columns=fullflexible,
+  basicstyle=\fontfamily{lmvtt}\selectfont,
+]
+  $\xi_1\ \in_{\xi}\ \xi_1$ = True
+  $\xi_1\ \in_{\xi}\ \lambda \chi:s\ . \xi_2$ = $\xi_1\ \in_{\xi}\ \xi_2$
+  $\xi_1\ \in_{\xi}$ ($\xi_2\ \xi_3$) = ($\xi_1\ \in_{\xi}\ \xi_2$) $\vee$ ($\xi_1\ \in_{\xi}\ \xi_3$)
+  $\xi_1\ \in_{\xi}$ ($\xi_2\ \cup\ \xi_3$) = ($\xi_1\ \in_{\xi}\ \xi_2$) $\vee$ ($\xi_1\ \in_{\xi}\ \xi_3$)
+  $\psi_1\ \in_{\xi}$ ($\mathit{l}$, $\psi_2$) = $\psi_1\ \in_{\xi}\ \psi_2$
+  $\xi_1\ \in_{\xi}\ \xi_2$ = False
+
+  maybeReplace $\xi_1$ | fresh($\chi$) $\wedge$ $\exists\left(\xi_2:s\right)\ .\ ($freeVariables($\xi_2$) $\cap$ boundVariables($\xi_1$)) $\equiv\ \emptyset\ \wedge\ \xi_2\ \in_{\xi}\ \xi_1$ = ($\lambda\ \left(\chi:s\right)$ . $\left[\xi_2\to\chi\right]\xi_1$) $\xi_2$
+  maybeReplace $\xi_1$ = $\xi_1$
+\end{lstlisting}
+The \verb+assocEq+, \verb+emptyEq+ and \verb+identEq+ are trivial to understand. The \verb+randomReplace+ rule, essentially picks a random term $\xi_2$ that occurrs inside another term $\xi_1$, replaces the term $\xi_2$ in $\xi_1$ with a fresh variable $\chi$ of the same sort and wraps the result in an abstraction of $\chi$ applied to $\xi_2$. It is necessary to check that $\xi_2$ does not contain variables bound by abstractions of $\xi_1$. The implementation of this function performs random selection of the term $\xi_2$.
+\\\\ 
+The testing approach used here is \verb+QuickCheck+. Random annotations and effects are constructed (via the implemented \verb+Arbitrary+ instance) and then the rules defined above are randomly applied to one or several of the elements contained in the randomly generated term. Then the new term and the randomly re-written term are normalized and after normalizing they should be equal up to the equality instance \verb+Eq+ generated by GHC. This property is expressed by the functions \verb+normalizeEquivalent+ defined in the sub-modules \verb+AnnotatonTests+ and \verb+EffectTests+ of \verb+Types+.
 \section{Algorithms}
-The algorithms for the analysis are defined as algebras which are then used to traverse the structure. The four main algorithms are:
+The algorithms for the analysis are defined as algebras which are then used to traverse the structure. The six main algorithms are:
 \begin{enumerate}
 \item The completion algorithm (\verb+Analysis.Algorithms.Completion+).
 \item The instantiation algorithm (\verb+Analysis.Algorithms.Instantiation+).
@@ -121,26 +156,27 @@ The algorithms for the analysis are defined as algebras which are then used to t
 \item The reconstruction algorithm (\verb+Analysis.Algorithms.Reconstruction+).
 \item The constraint solver (\verb+Analysis.Algorithms.Solve+).
 \end{enumerate}
-Additionally, the package \verb+Analysis.Algorithms.Common+ contains code which is common to all the algorithms. The following sections explain details on how theese algorithms were implemented.
+Additionally, the package \verb+Analysis.Algorithms.Common+ contains code which is common to all the algorithms. The following sections explain details on how these algorithms were implemented.
 \subsection{Common}
-In this package, mostly structures for bookeeping the different stages of the algorithm are defined. The structure \verb+RState+ is used to store the value of variables created at different stages of the reconstruction algorithm. It contains three fields:
+In this package, mostly structures for bookkeeping the different stages of the algorithm are defined. The structure \verb+RState+ is used to store the value of variables created at different stages of the reconstruction algorithm. It contains three fields:
 \begin{itemize}
 \item \verb+freshFlowVars+ map that contains the identifiers assigned to the $\beta_1$ variables of the reconstruction algorithm. This is necessary because the variable is used as argument for a recursive call so all atoms of the \verb+LambdaCalc+ need access to its value.
 \item \verb+completions+ map that contains the value that results from calling the completion algorithm in the abstraction branch. The result of the completion is added to the environment and used in recursive calls. However, this map is not entirely necessary since the value could be recovered from the environment but it is defined for convenience.
 \item \verb+gammas+ This contains the value of the environment $\Gamma$ at every point in the reconstruction algorithm.
 \end{itemize}
-The values of the components of this strucutre are intialized by the functions \verb+calcCompletions+ and \verb+calcGammas+ of the module \verb+Analysis.Algorithms.Reconstruction+.
+The values of the components of this structure are initialized by the functions \verb+calcCompletions+ and \verb+calcGammas+ of the module \verb+Analysis.Algorithms.Reconstruction+.
 The \verb+RContext+ structure is used as the state of the state monad where the reconstruction algorithm is being executed. It contains the fields:
 \begin{itemize}
 \item \verb+freshIx+ this field contains the value of the latest index that was given to a fresh variable. Fresh variables are always given a negative index and every time a new fresh variable is demanded, the value of this field is decreased by one.
 \item \verb+fvGammas+ this field contains a map which stores the sort that has been given to every fresh variable created at any stage of the algorithm
-\item \verb+history+ at every step of the reconstruction alorithm, the value that was assigned to all the variables present in that step is saved in this field. This allows easier inspection on how the final result was obtained.
+\item \verb+history+ at every step of the reconstruction algorithm, the value that was assigned to all the variables present in that step is saved in this field. This allows easier inspection on how the final result was obtained.
 \end{itemize}
-The reconstruciton algorithm also contains an Exception monad to handle cases when an incorrectly typed lambda term is analyzed. To nicely display error messages, the \verb+FailureElement+ type is used. Details about this type are very technical because it is simply a choice type with many branches. The type is defined this way so different rendering mechanisms can display errors in the most suitable way.
+The reconstruction algorithm also contains an \verb+Exception+ monad to handle cases when an incorrectly typed lambda term is analyzed. To nicely display error messages, the \verb+FailureElement+ type is used. Details about this type are very technical because it is simply a choice type with many branches. The type is defined this way so different rendering mechanisms can display errors in the most suitable way.
 \subsection{Reconstruction}
-The algorithm is implemented very similarly as it is described in the paper. It is divided in three stages, namely \verb+calcGammas+, \verb+calcCompletions+ and \verb+reconstructionF+ which perform the steps indicated above. It includes a logging and error reporting facility. The log contains a list of values for all the variables that are defined in the pseudo-code algorithm of the original paper. Since this implementation performs a particular normalization, the log also includes the values of the variables before normalizations were applied. After the algorithm completes, a final constraint solving step is invoked to obtain the final annotation for the type and the set of effects that have been obtained for the type.
+\label{sec:reconstruction}
+The algorithm is implemented very similarly as it is described in the paper. It is divided in three stages, namely \verb+calcGammas+, \verb+calcCompletions+ and \verb+reconstructionF+ which perform the steps indicated above. It includes a logging and error reporting facility. The log contains a list of values for all the variables that are defined in the pseudo-code of the algorithm of the original paper. Since this implementation performs a particular normalization, the log also includes the values of the variables before normalizations were applied. After the algorithm completes, a final constraint solving step is invoked to obtain the final annotation for the type and the set of effects that have been obtained for the type.
 \\\\
-With the algorithm as described in the original paper, the author did not manage to produce a successful implementation to analyzie fixpoints. Below the problems encountered are described and later the solution the author implemented in this version of the algorithm. If the implementation as described in the original paper is desired, the program can be compiled with the CPP flag ``-DNoFixWorkaround''. This is the version used to show the problems.
+With the algorithm as described in the original paper, the author did not manage to produce a successful implementation to analyze fixpoints. Below, the problems encountered are described and later the solutions are presented. If the implementation as described in the original paper is desired, the program can be compiled with the CPP flag ``-DNoFixWorkaround''. This is the version used to show the problems.
 \\\\
 The first problem is that free variables are produced as a result of replacing a variable with itself during the matching phase of the fix case. Consider the expression:
 \[
@@ -168,14 +204,14 @@ Important to note: it quantifies over the $\beta^3$ and $\delta^2$ variables. Si
 \[
 \tau'' = \forall{}\beta{}^{1}:\mathtt{A}\;{}.\;{}\left(\left(\mathtt{B}\right)^{\beta{}^{1}}\right)\xrightarrow{\left\{\left(\textbf{@4},\beta{}^{1}\right);\;{}\left(\textbf{@6},\beta{}^{-23}\right);\;{}\delta{}^{-24}*\textbf{@8}\right\}}\left(\mathtt{B}\right)^{\left\{\beta{}^{-25}*\left\{\right\};\;{}\textbf{@9};\;{}\beta{}^{-25}*\textbf{@8}\right\}}
 \]
-Theese types are then matched to produce a replacement. Matching proceeds by creating a replacement to the quantified variable ($\beta^1$) and then the case for arrows of the matching algorithm is reached. Looking at $\tau'$ and $\tau''$, theese are the values of the relevant variables involved in this stage of matching:
+These types are then matched to produce a replacement. Matching proceeds by creating a replacement to the quantified variable ($\beta^1$) and then the case for arrows of the matching algorithm is reached. Looking at $\tau'$ and $\tau''$, these are the values of the relevant variables involved in this stage of matching:
 \[
 \begin{array}{c c}
 \delta_0\overline{\chi_i}=\delta{}^{-24}*\beta{}^{1} & \phi = \left\{\left(\textbf{@4},\beta{}^{1}\right);\;{}\left(\textbf{@6},\beta{}^{-23}\right);\;{}\delta{}^{-24}*\textbf{@8}\right\} \\
 \beta_0\overline{\beta_j}=\beta{}^{-25}*\beta{}^{1} & \psi_2=\left\{\beta{}^{-25}*\left\{\right\};\;{}\textbf{@9};\;{}\beta{}^{-25}*\textbf{@8}\right\}
 \end{array}
 \]
-At this stage, the substitution $\theta$ is extended with $\left[\delta^{-24}\to{}\left(\lambda{}\beta{}^{1}:\mathtt{A}\;{}.\;{}\left\{\left(\textbf{@4},\beta{}^{1}\right);\;{}\left(\textbf{@6},\beta{}^{-23}\right);\;{}\delta{}^{-24}*\textbf{@8}\right\}\right)\right]$ and\\ $\left[\beta^{-25}\to{}\left(\lambda{}\beta{}^{1}:\mathtt{A}\;{}.\;{}\left\{\beta{}^{-25}*\left\{\right\};\;{}\textbf{@9};\;{}\beta{}^{-25}*\textbf{@8}\right\}\right)\right]$. Both of theese cases substitute a free variable with an expression that contains the variable. This is how the free variables end up in the resulting type. One simple solution seems to be eliminating the exprssions that contain $\delta^{-24}$ and $\beta^{-25}$. For the annotation signature that would give the correct result but for the effect signature, the consumption of {\bf @8} by `some` expression, which clearly happens in the expression labeled {\bf @6}, would get discarded. A second alternative is quantifying over the free variables which would result with the fixpoint expression:
+At this stage, the substitution $\theta$ is extended with $\left[\delta^{-24}\to{}\left(\lambda{}\beta{}^{1}:\mathtt{A}\;{}.\;{}\left\{\left(\textbf{@4},\beta{}^{1}\right);\;{}\left(\textbf{@6},\beta{}^{-23}\right);\;{}\delta{}^{-24}*\textbf{@8}\right\}\right)\right]$ and\\ $\left[\beta^{-25}\to{}\left(\lambda{}\beta{}^{1}:\mathtt{A}\;{}.\;{}\left\{\beta{}^{-25}*\left\{\right\};\;{}\textbf{@9};\;{}\beta{}^{-25}*\textbf{@8}\right\}\right)\right]$. Both of these cases substitute a free variable with an expression that contains the variable. This is how the free variables end up in the resulting type. One simple solution seems to be eliminating the expressions that contain $\delta^{-24}$ and $\beta^{-25}$. For the annotation signature that would give the correct result but for the effect signature, the consumption of {\bf @8} by `some` expression, which clearly happens in the expression labeled {\bf @6}, would get discarded. A second alternative is quantifying over the free variables which would result with the fixpoint expression:
 \[
 \mathbf{fix}\;{}\left(\lambda{}x^{1}:\mathtt{B}\to{}\mathtt{B}\;{}.\;{}\left(\lambda{}x^{2}:\mathtt{B}\;{}.\;{}\left(\mathbf{if}\;{}x^{2}\;{}\mathbf{then}\;{}\left(x^{1}*\left(\mathbf{False}\right)^{\mathit{@8}}\right)^{\mathit{@6}}\;{}\mathbf{else}\;{}\left(\mathbf{True}\right)^{\mathit{@9}}\right)^{\mathit{@4}}\right)^{\mathit{@3}}\right)^{\mathit{@2}}
 \]
@@ -195,11 +231,11 @@ which has the annotated type given previously. Of particular interest is the typ
 \]
 It is important to note that $\beta^{4}$ is the variable that denotes the argument of the recursive call of the function. In this example: $\mathbf{False}^{\mathit{@8}}$. The $\delta^2$ variable denotes the effects induced by the recursive function (ie. the function itself). With this notion it is very easy to determine what $\beta^{3}$ and $\delta^{2}$ ($\beta^{-25}$ and $\delta^{-24}$ respectively) should be:
 \begin{itemize}
-\item If the annotation signature contains the variable $\beta^{4}$ on its own, it means that the recursive argument may be returend by the function which means that $\beta^{-25}$ should be the identity function.
+\item If the annotation signature contains the variable $\beta^{4}$ on its own, it means that the recursive argument may be returned by the function which means that $\beta^{-25}$ should be the identity function.
 \item If the annotation signature does not contain the variable $\beta^{4}$ on its own, it means that the recursive argument is never returned by the function so $\beta^{-25}$ should be the constant $\emptyset$ function.
-\item If the effect signature contains a flow parametrized by $\beta^{4}$ (for example $\left(\mathbf{@4},\beta^{4}\right)$) it means that a recursive call is performed with the element labeled by the flow label as argument. The variable $\delta^{-24}$ should be a function that takes as argumetn an annotation and returns all the flows containing $\beta^4$. In this example: $\delta^{-24}=\lambda\beta:\mathtt{A}.\left(\mathbf{@4},\beta\right)$.
+\item If the effect signature contains a flow parametrized by $\beta^{4}$ (for example $\left(\mathbf{@4},\beta^{4}\right)$) it means that a recursive call is performed with the element labeled by the flow label as argument. The variable $\delta^{-24}$ should be a function that takes as argument an annotation and returns all the flows containing $\beta^4$. In this example: $\delta^{-24}=\lambda\beta:\mathtt{A}.\left(\mathbf{@4},\beta\right)$.
 \end{itemize}
-If the recursive call takes more than one argument, theese function should be adjusted respectively to discard the annotation variables that don't appear in the corresponding annotation and effect signatures of the recursive functions. With theese adjustments in place, the fixpoint expression now has type:
+If the recursive call takes more than one argument, these function should be adjusted respectively to discard the annotation variables that don't appear in the corresponding annotation and effect signatures of the recursive functions. With these adjustments in place, the fixpoint expression now has type:
 \[
 \forall{}\beta{}^{1}:\mathtt{A}\;{}.\;{}\left(\left(\mathtt{B}\right)^{\beta{}^{1}}\right)\xrightarrow{\left\{\left(\textbf{@4},\textbf{@8}\right);\;{}\left(\textbf{@6},\textbf{@3}\right);\;{}\left(\textbf{@4},\beta{}^{1}\right)\right\}}\left(\mathtt{B}\right)^{\textbf{@9}}
 \]
@@ -210,7 +246,7 @@ and the whole expression results in:
 \phi=\left\{\left(\textbf{@1},\textbf{@2}\right);\;{}\left(\textbf{@4},\textbf{@10}\right);\;{}\left(\textbf{@4},\textbf{@8}\right);\;{}\left(\textbf{@6},\textbf{@3}\right);\;{}\left(\textbf{@0},\textbf{@3}\right)\right\}
 \end{array}
 \]
-The example above provides the intuition behind the problem. The general solution to the problem is creating a list of adjustment functions since ocassions when fixpoint recursion is performed over functions that take more than one argument create more free variables. Theese adjustments are obtained via the functions \verb+getQuantifiedVars+ and \verb+mkFixReplacements+. Below they are described:
+The example above provides the intuition behind the problem. The general solution to the problem is creating a list of adjustment functions since occasions when fixpoint recursion is performed over functions that take more than one argument create more free variables. These adjustments are obtained via the functions \verb+getQuantifiedVars+ and \verb+mkFixReplacements+. Below they are described:
 \begin{lstlisting}[
   mathescape,
   columns=fullflexible,
@@ -219,7 +255,7 @@ The example above provides the intuition behind the problem. The general solutio
   getQuantifiedVars ($\forall \left(\beta:s\right).\ \tau\xrightarrow{\phi}\tau'^{\psi}$) = $\left(\left(\beta:s\right),\phi,\psi\right)\ \uplus\ $getQuantifiedVars $\tau'$
   getQuantifiedVars $\tau$ = $\emptyset$
 \end{lstlisting}
-The algorithm is defined for lists ($\uplus$ denotes list append and $\emptyset$ empty list) since the order in which the quantifiers appears is important. The algorithm simply matches each quantified variable with the effects and annotatiions immediately exposed by the expression inside the quantifier. Next is the definition of \verb+mkFixReplacements+:
+The algorithm is defined for lists ($\uplus$ denotes list append and $\emptyset$ empty list) since the order in which the quantifiers appears is important. The algorithm simply matches each quantified variable with the effects and annotations immediately exposed by the expression inside the quantifier. Next is the definition of \verb+mkFixReplacements+:
 \begin{lstlisting}[
   mathescape,
   columns=fullflexible,
@@ -240,7 +276,7 @@ The algorithm is defined for lists ($\uplus$ denotes list append and $\emptyset$
     let cata ($\mathit{k}$,$\theta_0$,$\overline{\left(\chi_i,\phi_i,\psi_i\right)}$) ($\chi,\phi,\psi$) =
           let ($\psi$, $\phi$) = mkFixReplacement ($\overline{\left(\chi_i,\phi_i,\psi_i\right)}\uplus\left(\chi,\phi,\psi\right)$) 
           in ($*\to k$, $\left[\beta_k\to\psi\right]\left[\delta_k\to\phi\right]\theta_0$, $\overline{\left(\chi_i,\phi_i,\psi_i\right)}\uplus\left(\chi,\phi,\psi\right)$)
-        (-, -, $\theta$) = foldl cata ($*$,[],$\emptyset$) $\overline{\left(\chi_j,\phi_j,\psi_j\right)}$
+        (-, -, $\theta$) = foldl cata ($*\to *$,[],$\emptyset$) $\overline{\left(\chi_j,\phi_j,\psi_j\right)}$
     in $\theta$
 \end{lstlisting}
 where
@@ -248,9 +284,9 @@ where
 \item $\left[\beta_k\to\psi\right]$ denotes a replacement for all free annotation variables with sort of kind $k$ with expression $\psi$.
 \item $\left[\delta_k\to\phi\right]$  denotes a replacement for all free effect variables with sort of kind $k$ with expression $\phi$
 \end{itemize}
-The algorithm \verb+mkFixReplacements+ takes as input a result from \verb+getQuantifiedVars+. The input is the sequence of quantified variables of the type of an expression that is given to \verb+fix+ as argument along with the toplevel effects and annotations. Theese effects and annotations are inspected for occurences of the variable and constant values (\verb+filterExp+ performs such check). Expressions containing those effects and annotations become the body of the abstraction. When many variables appear quantified, multiple abstractions are created, each with a higher kind, since the toplevel annotations and expressions may contain several of the quantified variables since they are bound by several quantifiers. As an end result, this algorithm produces a set of replacements for the free annotation and effect variables that emerge from the incomplete replacement returned by the matching algorithm.
+The algorithm \verb+mkFixReplacements+ takes as input a result from \verb+getQuantifiedVars+. The input is the sequence of quantified variables of the type of an expression that is given to \verb+fix+ as argument along with the top-level effects and annotations. These effects and annotations are inspected for occurrences of the quantified variables and constant values (\verb+filterExp+ performs such check). Expressions containing those effects and annotations become the body of the abstraction. When many variables appear quantified, multiple abstractions are created, each with a higher kind, since the top-level annotations and expressions may contain several of the quantified variables since they are bound by several quantifiers. As an end result, this algorithm produces a set of replacements for the free annotation and effect variables that emerge from the incomplete replacement returned by the matching algorithm.
 \\\\
-This algorithm seems to be more complicated that it should, but all theese details have to be in place is one wishes correct results when using \verb+fix+ with functions that take more than one argument; especially if such functions contain intermediate expressions instead of simply being a sequence of abstractions and then an expression. Examples 11-14 of this program contain such cases.
+This algorithm seems to be more complicated that it should, but all these details have to be in place is one wishes correct results when using \verb+fix+ with functions that take more than one argument; especially if such functions contain intermediate expressions instead of simply being a sequence of abstractions and then an expression. Examples 11-14 of this program contain such cases.
 \\\\
 The second adjustment that was done to the algorithm concerns dealing with infinite recursion. Consider fixing the identity function:
 \[
@@ -268,8 +304,8 @@ The variables $\beta^{-11}$ and $\delta^{-10}$ don't concern us here since they 
 ]
   empty $\mathtt{A}$ = $\emptyset$
   empty $\mathtt{E}$ = $\emptyset$
-  empty $\lambda \beta .\beta_1$ = $\lambda \beta.$empty $\beta_1$
-  empty $\lambda \delta .\delta_1$ = $\lambda \beta.$empty $\delta_1$
+  empty $\mathtt{A} \to s$ = $\lambda \beta.$empty $s$
+  empty $\mathtt{E} \to s$ = $\lambda \beta.$empty $s$
 \end{lstlisting}
 With the addition of this constraint, the function above now has type:
 \[
@@ -277,21 +313,43 @@ With the addition of this constraint, the function above now has type:
 \]
 It indicates that the expression will not return an element constructed anywhere. It is debatable what should be the right answer here, but for practical purposes, one can expect that the expression will effectively never deliver an answer and nothing will flow out of it.
 \subsection{Completion}
-The completion algorithm is implemented in continuation passing style. The \verb+completion'+ funciton takes as first argument a continuation function which will eventually return the completed type and a list of constant values for the constraint solver. The implementation is done very similarly as described in the original paper except that recursive calls are replaced by continuations. The execution (for the arrow case) proceeds by first performing the recursive call to completion and then applying the result to a continuation that corresponds to the remainder of the body of the completion algorithm (denoted by \verb+cont''+ in the implementation). It uses the underlying state monad to generate fresh variables and this has the convenience of keeping track of the sort that the free variables are assigned.
+The completion algorithm is implemented in continuation passing style. The \verb+completion'+ function takes as first argument a continuation function which will eventually return the completed type and a list of constant values for the constraint solver. The implementation is done very similarly as described in the original paper except that recursive calls are replaced by continuations. The execution (for the arrow case) proceeds by first performing the recursive call to completion and then applying the result to a continuation that corresponds to the remainder of the body of the completion algorithm (denoted by \verb+cont''+ in the implementation). It uses the underlying state monad to generate fresh variables and this has the convenience of keeping track of the sort that the free variables are assigned.
 \\\\
-The role of the completion algorithm is to annotate a type without annotations. While doing so a list of variables that should remain constant while solving constraints is generated and the reconstruction alorithm passes theese variables to the constraint solver.
+The role of the completion algorithm is to annotate a type without annotations. While doing so a list of variables that should remain constant while solving constraints is generated and the reconstruction algorithm passes these variables to the constraint solver.
 \subsection{Join}
 The join algorithm takes care of joining two types into one by matching them on their syntactic structure and generating a type that contains the effects and annotations of both of its arguments. The original pseudo-code is very declarative since it requires that variables bound by quantifiers to be equal up to sorting and alpha-renaming. Fortunately, for normalized types, this happens automatically thus the implementation of the algorithm looks almost exact line by line to the pseudo-code. One of the additions of this implementation is that its first argument is the label where the joining is being performed. This is only used for error reporting.
 \subsection{Matching}
-The matching algorithm also benefits from the assumption of having its arguments normalized. This allows an almost line by line translationn (mostly for the matching of patterns). Two helper functions are defined, namely \verb+getChis+ and \verb+getBetas+, which extract the arguments and function of an application. The result, instead of being a function, as done in the pseudo-code, is a map mapping variable names to arguments. The map is indexed by integers. This is possible since the replacements only involve free variables and each time a free variable is generated, a unique index is given to it. The type of the values of the map is \verb+Either Annotation Effect+. This is because the variable for which the replacement applies is an annotation or an effect. This allows it to be used as a replacement for annotation arguments by simply removing all the effects from the map. The application of replacements are performed by the algebra \verb+baseReplaceAlg+ defined in \verb+Analysis.Types.Common+. This algebra takes a map indexed by variable names and replacements for the variable and returns an expression with those replacements applied.
+The matching algorithm also benefits from the assumption of having its arguments normalized. This allows an almost line by line translation (mostly for the matching of patterns). Two helper functions are defined, namely \verb+getChis+ and \verb+getBetas+, which extract the arguments and function of an application. The result, instead of being a function, as done in the pseudo-code, is a map mapping variable names to arguments. The map is indexed by integers. This is possible since the replacements only involve free variables and each time a free variable is generated, a unique index is given to it. The type of the values of the map is \verb+Either Annotation Effect+. This is because the variable for which the replacement applies is an annotation or an effect. This allows it to be used as a replacement for annotation arguments by simply removing all the effects from the map. The application of replacements are performed by the algebra \verb+baseReplaceAlg+ defined in \verb+Analysis.Types.Common+. This algebra takes a map indexed by variable names and replacements for the variable and returns an expression with those replacements applied.
 \subsection{Instantiation}
-This algorithm removes the outter most quantifiers of a type and replaces the variables bound by those quantifiers with free fresh variables. Not much can be said about the algorithm since it is a line by line translation of the pseudo-code. Free variables are obtained using the context which keeps track of the sort given to the variables.
+This algorithm removes the outer most quantifiers of a type and replaces the variables bound by those quantifiers with free fresh variables. Not much can be said about the algorithm since it is a line by line translation of the pseudo-code. Free variables are obtained using the context which keeps track of the sort given to the variables.
 \subsection{Constraint Solving}
-The algorithm is implemented as described in the paper. Since \verb+Annotation+ and \verb+Effect+ are different types in Haskell, they are packed inside an \verb+Either+ to distinguish them. In addition to the arguments described in the paper, the algorithm takes as an additional argument the label of the expression under active analysis for error reporting. The constraint solving phase is done by the \verb+solveIt+ algorithm which iterates over a queue inside its own state monad. To check for the subset relation, the following rule is used:
+The algorithm is implemented as described in the paper. Since \verb+Annotation+ and \verb+Effect+ are different types in Haskell, they are packed inside an \verb+Either+ to distinguish them. In addition to the arguments described in the paper, the algorithm takes as an additional argument: the label of the expression under active analysis for error reporting. The constraint solving phase is done by the \verb+solveIt+ algorithm which iterates over a queue inside its own state monad. To check for the subset relation, the following rule is used:
 \[
 \xi_1\subseteq \xi_2\ =\ \mathtt{normalize}\ \xi_2\ \equiv\ \mathtt{normalize}\ \left(\xi_1\cup\xi_2\right)
 \]
-The pseudo-code also has the luxury of being able to apply substitutions in a single line but the implementation of the solver must distinguish which case of the \verb+Either+ type is being substituted and then apply the replacement of free variables as appropiate. This process is handled by the sub-routine \verb+lookupExpr+. Since this algorithm lives in the monadic environment from which free variables are obtained, it also has access to the environment containing the sorts of the free variables. This is important because the initalization stage when all variables are assigned to the empty set, the empty element for the variable is used instead of the empty set. This element is obtained as described above using the sort available in the environment.
-
-
+The pseudo-code also has the luxury of being able to apply substitutions in a single line but the implementation of the solver must distinguish which case of the \verb+Either+ type is being substituted and then apply the replacement of free variables as appropriate. This process is handled by the sub-routine \verb+lookupExpr+. Since this algorithm lives in the monadic environment from which free variables are obtained, it also has access to the environment containing the sorts of the free variables. This is important because the initialization stage when all variables are assigned to the empty set, the empty element for the variable is used instead of the empty set. This element is obtained as described above using the sort available in the environment.
+\section{Conclusions}
+This is a successful implementation of a flow analysis for a first order language. It shows it is possible to reconstruct the type annotations corresponding to effects and flows of the language, even though such annotations are Rank-2 types. The implementation was tested with many examples, in particular the 14 examples included with the distribution, which contain:
+\begin{itemize}
+\item {\bf Example 6} and {\bf Example 7}: A function with a second order type.
+\item {\bf Example 10}: An infinite fixpoint.
+\item {\bf Example 13} and {\bf Example 14}: Fixpoint applied to a function of kind $*\to * \to *$
+\end{itemize}
+The original algorithm required some additions (described in section \ref{sec:reconstruction}). The author believes that at least these additions are necessary but is unsure if they are the only extra requirements for the algorithm to be complete. The examples that have been tested with this implementation are among the most complex examples the algorithm has been tested with.
+\\\\
+For the implementation to be successful, the author needed to create a method to reduce equivalent terms to the same normal form. This method was described in \ref{sec:red} and was tested against randomly generated lambda terms under randomly applied re-write rules based on the equality relations described in \cite{analysis}. The normalization process seems to be sufficient to reconstruct the type annotations and for the equality relations to hold. However, the author believes it is not sufficient for a lambda calculus with set unions. In particular, the following reduction:
+\[
+\chi\ \xi_1\ ...\ \xi_n\ \cup\ \chi\ \xi_1'\ ...\ \xi_n'\ \to\ \chi\ \left(\xi_1\cup\xi_1'\right)\ ...\ \left(\xi_n\cup\xi_n'\right)
+\]
+is probably necessary to ensure normal forms of equivalent terms are equal but doesn't seem necessary for this algorithm since the constraint solver (where normalization is essential) will still terminate with the absence of the rule (ie. after one extra iteration both sides of the relation will be in the sequence of unions) and once the variable $\chi$ is replaced by another term, the result of the reduction will be the same. The rule was omitted because (even though it looks trivial) it is not so simple to implement so there is no reason to pay for unnecessary increase in complexity. This also shows that the tests shipped with the implementation are incomplete since they still pass without this reduction rule.
+\\\\
+The chosen normalization approach enjoys several advantages when implementing code that operates with normalized expressions. For example, the join, instantiation and matching algorithms require almost no extra complexity (compared to their declarative definition in \cite{analysis}) because the equality checks follow trivially if terms are normalized as described. The naming the normalization used also makes it difficult to confuse a bound variable with the fresh identifier originally given to it: once it becomes bound, its name will change.
+\\\\
+Conveniently, the normalized expressions are very nice for rendering results. Since all variables are named according to their depth it is easy to keep track of what is the purpose of each variable when inspecting the results. 
+\\\\
+The implementation also includes a web based user interface which makes it very pleasant to inspect results delivered by the algorithm. The interface also includes a log containing the values assigned to all the variables involved at each step of the reconstruction algorithm. The variables corresponding to annotated types are presented both normalized and raw ($\tau^*$ is the raw version of $\tau$). The log was essential for the author to determine what was missing for fixpoints to be correctly typed. The log is accessible even if the algorithm failed (unless parsing of the expression failed). The interface also implements the reduction rules of the lambda calculus (as described in \cite{analysis}) so the user can double check that the annotations and effects indeed match the result.
+\\\\
+The implementation has some drawbacks. In particular, folds have been implemented by hand instead of using an attribute grammar. This happened because 1) it was a good learning exercise for the author in order to understand how attribute grammars work 2) The author likes all his code being native Haskell. Using some extra type class hackery and the view patterns extension, some algorithms could be implemented generically enough to work with all structures but adding labels to the lambda calculus resulted in a lot of code duplication because of this approach. Another drawback is that the use of continuation passing style made the instantiation algorithm much more complex than necessary (another experiment by the author). To parse expressions, the web interface uses the derived \verb+Read+ typeclass which provides bad error messages.
+\bibliographystyle{plain}
+\bibliography{references}
 \end{document}

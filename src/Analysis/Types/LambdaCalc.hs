@@ -10,6 +10,8 @@ import qualified Analysis.Types.Effect as E
 import qualified Analysis.Types.Annotation as A
 import qualified Data.Set as D
 
+-- | Type that represents the type-lambda calculus with fixpoints
+-- described in the paper.
 data LambdaCalc t =
   Var Int
   | VFalse
@@ -20,6 +22,11 @@ data LambdaCalc t =
   | Fix (LambdaCalc t)
   deriving (Show,Read,Eq,Ord)
 
+-- | Same as the LambdaCalc type, but annotations are
+-- made explicit by adding an extra field to the constructor.
+-- This is necessary because fixpoint expressions employ a re-writing
+-- of the AST such that the annotation information cannot be implicitly
+-- deduced.
 data ALambdaCalc t =
   AVar Int Int
   | AFalse Int
@@ -95,20 +102,6 @@ groupAlgebraInit s0 =
       ffix = \_ s1 -> return s1
       }
 
-
--- instance C.LambdaCalculus (LambdaCalc t) (Algebra t) where
---   lambdaDepths = depths
---   app (App _ a1 a2) = Just (a1,a2)
---   app _ = Nothing
---   appC = undefined
---   var (Var i) = Just i
---   var _ = Nothing
---   varC = Var
---   abst (Abs _ v e) = undefined -- Just (v,e)
---   abstC = undefined
---   increment = undefined
---   baseAlgebra = undefined
-
 foldALambdaCalcM Algebra{..} expr = foldLambdaCalcM' undefined expr
   where
     foldLambdaCalcM' s l = do
@@ -163,6 +156,8 @@ depths = runIdentity . (foldLambdaCalcM alg)
       ffix = \i d1 -> return $ M.insert i 0 d1
       }
 
+-- | Function that converts an implicitly annotated lambda
+-- calculus into an explicitly annotated variant
 addLabels = runIdentity . (foldLambdaCalcM alg)
   where
     varF i v = return $ AVar i v
@@ -205,6 +200,9 @@ shadows v = runIdentity . (foldALambdaCalcM alg)
       ffix = fixF
       }
 
+-- | Function to replace all ocurrences of the argument
+-- variable in the second argument (unless shadowed) by
+-- the third argument
 replace v e e1 = snd $ runIdentity $ (foldALambdaCalcM alg e)
   where
     falseF i = return (AFalse i,AFalse i)
@@ -230,6 +228,10 @@ replace v e e1 = snd $ runIdentity $ (foldALambdaCalcM alg e)
       fapp = appF,
       fvar = varF}
 
+-- | Function that reduces an annotated LambdaCalculus. It takes as an
+-- argument wether or not employ a full reduction or leave the fixpoints
+-- un-reduced. It is important not to always eagerly reduce the fixpoints
+-- otherwise it gets into an infinite loop.
 reduce whnf e = (reduceStep whnf e) >>= go e
   where
     go e1 (e2,effs)
@@ -238,6 +240,8 @@ reduce whnf e = (reduceStep whnf e) >>= go e
         (e2',effs') <- reduceStep whnf e2
         go e2 (e2',D.unions [effs, effs'])
 
+-- | Traverse once an entire Annotated Lambda Term and perform all reductions
+-- | possible. The first argument indicates wether or not reduce the fixpoints
 reduceStep whnf c =
   case c of
     AApp i e1@(AFix _ _) e2 ->

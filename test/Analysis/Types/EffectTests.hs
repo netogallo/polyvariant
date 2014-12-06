@@ -15,10 +15,14 @@ import Data.Maybe (fromJust)
 import Control.Monad.Identity
 import qualified Analysis.Types.Common as C
 
+-- | Type that denotes that both of its arguments
+-- should have the same normal form
 data Equiv = Equiv Effect Effect deriving Show
 
 arbitraryWithSort = arbitraryWithGammaAndSort M.empty
 
+-- | Given an environment of variables with sorts and a sort, produce
+-- a randomly generated Effect of the input sort
 arbitraryWithGammaAndSort gamma' sort' = evalStateT (arbitrary' gamma' sort') 0
   where
     arbitrary' gamma sort = do
